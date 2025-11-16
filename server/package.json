@@ -1,0 +1,9 @@
+{
+  "name": "mendly-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd .. && npm run dev:server",
+    "start": "cd .. && npm run start:server"
+  }
+}

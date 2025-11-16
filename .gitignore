@@ -1,0 +1,107 @@
+###################################
+# Root .gitignore for Mendly app
+# (React + Vite + FastAPI + SQL Server)
+###################################
+
+# --- Node / JS ---
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Python / FastAPI ---
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+htmlcov/
+.coverage*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.envrc
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env/
+
+# --- Environment files (keep examples only) ---
+.env
+.env.*
+!.env.example
+
+react-app/.env
+react-app/.env.*
+!react-app/.env.example
+
+server/.env
+server/.env.*
+!server/.env.example
+
+# --- Frontend build / cache (Vite / React) ---
+react-app/dist/
+react-app/build/
+react-app/.vite/
+**/.vite/
+.cache/
+
+# --- Test / coverage (JS + TS) ---
+coverage/
+.nyc_output/
+jest-cache/
+jest-stare/
+*.lcov
+*.tsbuildinfo
+
+# --- Logs & runtime data ---
+logs/
+*.log
+pids
+*.pid
+*.seed
+*.pid.lock
+node_repl_history
+
+# --- OS cruft ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# --- Editors / IDEs ---
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.iml
+
+# --- Database / SQL Server artifacts ---
+*.mdf
+*.ldf
+*.ndf
+*.bak
+*.trn
+
+# --- Tooling / misc ---
+.direnv
+firebase-debug.log
+*.local
+*.orig
