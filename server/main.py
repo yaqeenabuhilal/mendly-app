@@ -1,4 +1,4 @@
-# server/main.py  (or wherever your FastAPI app is defined)
+# server/main.py
 
 import os
 import asyncio
@@ -11,7 +11,15 @@ from sqlalchemy import text  # type: ignore
 
 from .db import engine, SessionLocal
 from .init_db import ensure_database_and_schema
-from .routers import journey_routes, auth_routes, ai_routes,checkin_routes
+from .routers import (
+    journey_routes,
+    auth_routes,
+    ai_routes,
+    checkin_routes,
+    positive_notifications_routes,
+    device_routes,
+)
+from .notification_worker import start_worker  # <-- background sender
 
 log = logging.getLogger("mendly.startup")
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +27,7 @@ logging.basicConfig(level=logging.INFO)
 INIT_DB_ON_STARTUP = os.getenv("INIT_DB_ON_STARTUP", "1") == "1"
 DB_WARMUP_ON_STARTUP = os.getenv("DB_WARMUP_ON_STARTUP", "0") == "1"
 DB_PING_TIMEOUT_SEC = float(os.getenv("DB_PING_TIMEOUT_SEC", "1.5"))
+NOTIF_WORKER_INTERVAL_SEC = int(os.getenv("NOTIF_WORKER_INTERVAL_SEC", "60"))
 
 origins = [
     "http://localhost:5173",
@@ -26,6 +35,7 @@ origins = [
     "http://localhost",
     "http://127.0.0.1",
 ]
+
 
 async def _ping_db_quick() -> None:
     """Tiny best-effort ping; never block startup."""
@@ -38,23 +48,30 @@ async def _ping_db_quick() -> None:
             db.execute(text("SELECT 1"))
 
     try:
-        await asyncio.wait_for(asyncio.to_thread(_do_ping), timeout=DB_PING_TIMEOUT_SEC)
+        await asyncio.wait_for(
+            asyncio.to_thread(_do_ping),
+            timeout=DB_PING_TIMEOUT_SEC,
+        )
         log.info("[startup] quick DB ping OK.")
     except asyncio.TimeoutError:
-        # Timeout is common on cold starts—treat as informational, not warning
-        log.info("[startup] quick DB ping skipped (took > %.1fs). Continuing boot.", DB_PING_TIMEOUT_SEC)
+        # Timeout is common on cold starts—informational only
+        log.info(
+            "[startup] quick DB ping skipped (took > %.1fs). Continuing boot.",
+            DB_PING_TIMEOUT_SEC,
+        )
     except Exception as e:
-        # Real errors still get logged
         log.warning("[startup] quick DB ping failed: %r", e)
 
-def _safe_init_db():
+
+def _safe_init_db() -> None:
     try:
         ensure_database_and_schema()
         log.info("[startup] ensure_database_and_schema finished.")
     except Exception as e:
         log.error("[startup] ensure_database_and_schema failed: %r", e)
 
-def _safe_db_warmup():
+
+def _safe_db_warmup() -> None:
     try:
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
@@ -62,30 +79,31 @@ def _safe_db_warmup():
     except Exception as e:
         log.info("[startup] DB warmup skipped/failed: %r", e)
 
-async def lifespan(app: FastAPI):
-    if INIT_DB_ON_STARTUP:
-        asyncio.create_task(asyncio.to_thread(_safe_init_db))
-    if DB_WARMUP_ON_STARTUP:
-        asyncio.create_task(asyncio.to_thread(_safe_db_warmup))
-
-    # Best-effort ping (won’t warn on normal timeouts anymore)
-    await _ping_db_quick()
-    yield
 
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Fire-and-forget tasks that should NOT block startup
-    # (they run in background threads)
+    """
+    Application lifespan:
+    - kick off DB init / warmup in background threads
+    - start notification worker
+    - do a quick best-effort DB ping
+    """
+    # Fire-and-forget tasks (do not block startup)
     if INIT_DB_ON_STARTUP:
         asyncio.create_task(asyncio.to_thread(_safe_init_db))
     if DB_WARMUP_ON_STARTUP:
         asyncio.create_task(asyncio.to_thread(_safe_db_warmup))
 
-    # Optional tiny ping with strict timeout so we never block boot
+    # Start background notification worker (reads NotificationQueue + sends FCM)
+    start_worker(interval_seconds=NOTIF_WORKER_INTERVAL_SEC)
+
+    # Optional tiny ping with strict timeout
     await _ping_db_quick()
 
+    # ---- app is now running ----
     yield
 
-    # (no shutdown work needed)
+    # No special shutdown logic needed
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -102,8 +120,16 @@ app.include_router(auth_routes.router)
 app.include_router(journey_routes.router)
 app.include_router(ai_routes.router)
 app.include_router(checkin_routes.router)
+app.include_router(positive_notifications_routes.router)
+app.include_router(device_routes.router)
+
 
 @app.get("/health/db")
 def health_db():
     with engine.connect() as conn:
-        return {"ok": True, "time": str(conn.execute(text("SELECT SYSDATETIMEOFFSET()")).scalar_one())}
+        return {
+            "ok": True,
+            "time": str(
+                conn.execute(text("SELECT SYSDATETIMEOFFSET()")).scalar_one()
+            ),
+        }

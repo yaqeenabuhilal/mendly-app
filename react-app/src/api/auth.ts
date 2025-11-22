@@ -63,7 +63,6 @@ export interface UpdateProfilePayload {
 
 // ============== AUTH HEADER HELPER ==============
 
-// ALWAYS returns a plain object with string values (valid HeadersInit)
 function buildAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem("access_token") || "";
   const headers: Record<string, string> = {
@@ -115,7 +114,7 @@ export async function changePassword(payload: {
 }): Promise<void> {
   const res = await fetch(`${API_BASE}/auth/change-password`, {
     method: "POST",
-    headers: buildAuthHeaders(),  // ✅ use the real helper
+    headers: buildAuthHeaders(),
     body: JSON.stringify(payload),
   });
 
@@ -128,12 +127,12 @@ export async function changePassword(payload: {
 // ====== JOURNEY / STATS TYPES & API ======
 
 export interface JourneyDay {
-  date: string;                // ISO date "YYYY-MM-DD"
-  avg_score: number | null;    // <-- allow null for missing days
+  date: string; // ISO date "YYYY-MM-DD"
+  avg_score: number | null;
 }
 
 export interface JourneySettings {
-  checkin_frequency: number;     // 1, 2, 3 from UserSettings table
+  checkin_frequency: number;
   motivation_enabled: boolean;
 }
 
@@ -159,7 +158,6 @@ export async function getJourneyOverview(): Promise<JourneyOverview> {
   return res.json();
 }
 
-
 // ========== AI CHAT ==========
 
 export interface AiMessage {
@@ -167,9 +165,7 @@ export interface AiMessage {
   content: string;
 }
 
-export async function sendChatToAI(
-  messages: AiMessage[]
-): Promise<string> {
+export async function sendChatToAI(messages: AiMessage[]): Promise<string> {
   const token = localStorage.getItem("access_token");
   if (!token) {
     throw new Error("Not authenticated");
@@ -193,7 +189,6 @@ export async function sendChatToAI(
   return json.reply as string;
 }
 
-
 // ---- CHECK-IN API ----
 
 export async function submitMoodCheckin(payload: {
@@ -213,8 +208,10 @@ export async function submitMoodCheckin(payload: {
   if (!res.ok) throw new Error(await res.text());
 }
 
-
-export interface SeriesPoint { date: string; avg_score: number | null; }
+export interface SeriesPoint {
+  date: string;
+  avg_score: number | null;
+}
 
 export async function getMoodSeries(days: number): Promise<SeriesPoint[]> {
   const res = await fetch(`${API_BASE}/journey/series?days=${days}`, {
@@ -222,5 +219,44 @@ export async function getMoodSeries(days: number): Promise<SeriesPoint[]> {
     headers: buildAuthHeaders(),
   });
   if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+
+// ========== POSITIVE NOTIFICATIONS SETTINGS ==========
+
+export interface PositiveNotificationSettings {
+  enabled: boolean;
+  frequency_minutes: number;
+}
+
+export async function getPositiveNotificationSettings(): Promise<PositiveNotificationSettings> {
+  const res = await fetch(`${API_BASE}/positive-notifications/settings`, {
+    method: "GET",
+    headers: buildAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Failed to load positive notifications: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function updatePositiveNotificationSettings(
+  payload: PositiveNotificationSettings
+): Promise<PositiveNotificationSettings> {
+  const res = await fetch(`${API_BASE}/positive-notifications/settings`, {
+    method: "POST",
+    headers: buildAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Failed to update positive notifications: ${res.status}`);
+  }
+
   return res.json();
 }

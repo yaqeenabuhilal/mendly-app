@@ -18,6 +18,7 @@ class CheckinPayload(BaseModel):
     label: Optional[str] = None
     note: Optional[str] = None  # saved to text_note_encrypted (varbinary)
 
+
 class CheckinResponse(BaseModel):
     saved: bool
     streak_days: int
@@ -25,7 +26,92 @@ class CheckinResponse(BaseModel):
     avg_14d: Optional[float]
     avg_30d: Optional[float]
 
-# ---------- Helpers ----------
+
+# ---------- Scoring helpers ----------
+
+# same mapping as the dropdown in the React CheckInPage
+LABEL_SCORES = {
+    "anxious": 1,
+    "stressed": 3,
+    "tired": 5,
+    "calm": 7,
+    "excited": 9,
+    "happy": 10,
+}
+
+# keyword rules for free-text "note" (you can extend this list any time)
+# first match wins – order from strongest negative to strongest positive
+KEYWORD_RULES = [
+    # very low mood
+    (["depressed", "miserable", "hopeless", "suicidal"], 1),
+    # low / sad
+    (["very sad", "so sad", "really sad"], 2),
+    (["sad", "down", "crying", "lonely", "unhappy"], 3),
+    # anxiety / stress
+    (["panic attack", "panic"], 2),
+    (["very anxious", "super anxious"], 2),
+    (["anxious", "anxiety", "worried", "stressed", "overwhelmed"], 3),
+    # tired / meh
+    (["exhausted", "burnt out", "burned out"], 3),
+    (["tired", "drained", "no energy"], 4),
+    (["meh", "bored"], 5),
+    # okay / calm
+    (["fine", "okay", "ok", "calm"], 7),
+    # positive
+    (["good day", "feeling good"], 7),
+    (["happy", "better", "grateful", "relieved"], 9),
+    (["amazing", "fantastic", "great", "awesome", "wonderful"], 10),
+]
+
+def _normalize_text(s: Optional[str]) -> str:
+  return (s or "").strip().lower()
+
+
+def estimate_score_from_text(note: Optional[str]) -> Optional[int]:
+    """
+    Look for known keywords inside the note and return a score 1..10.
+    If nothing matches, return None and let caller decide a default.
+    """
+    text = _normalize_text(note)
+    if not text:
+        return None
+
+    for keywords, score in KEYWORD_RULES:
+        if any(k in text for k in keywords):
+            return score
+
+    return None  # no keyword matched
+
+
+def compute_final_score(payload: CheckinPayload) -> int:
+    """
+    Decide what score to save in the DB based on:
+    1) explicit numeric score from frontend (emoji or list)
+    2) label (dropdown string)
+    3) free-text note keywords
+    4) fallback = 5 (neutral) if nothing else found
+    """
+    # 1) numeric score from frontend (emoji or list)
+    if payload.score is not None:
+        return payload.score
+
+    # 2) label from dropdown
+    if payload.label:
+        lbl = payload.label.strip().lower()
+        if lbl in LABEL_SCORES:
+            return LABEL_SCORES[lbl]
+
+    # 3) free text – try to infer from keywords
+    inferred = estimate_score_from_text(payload.note)
+    if inferred is not None:
+        return inferred
+
+    # 4) fallback neutral
+    return 5
+
+
+# ---------- Streak / rolling average helpers ----------
+
 def _compute_streak(db: Session, uid: str) -> int:
     rows = db.execute(
         text("""
@@ -54,6 +140,7 @@ def _compute_streak(db: Session, uid: str) -> int:
             break
     return streak
 
+
 def _rolling_avg(db: Session, uid: str, days: int) -> Optional[float]:
     cut = datetime.now(timezone.utc) - timedelta(days=days)
     r = db.execute(
@@ -66,6 +153,7 @@ def _rolling_avg(db: Session, uid: str, days: int) -> Optional[float]:
     ).fetchone()
     return float(r.a) if r and r.a is not None else None
 
+
 # ---------- Route ----------
 @router.post("", response_model=CheckinResponse, status_code=status.HTTP_201_CREATED)
 def create_checkin(
@@ -75,12 +163,13 @@ def create_checkin(
 ):
     now = datetime.now(timezone.utc)
 
-    # allow sending without emoji: default score to 5 (NOT NULL column)
-    score_to_save = payload.score if payload.score is not None else 5
-    label_to_save = payload.label or None
-    note_to_save  = payload.note or None  # str -> will convert to varbinary below
+    # 1) Decide which score to save
+    score_to_save = compute_final_score(payload)
 
-    # map the score to the emoji we show in the UI (for storage in emojis_json)
+    label_to_save = payload.label or None
+    note_to_save = payload.note or None  # str -> will convert to varbinary below
+
+    # 2) pick emoji for that numeric score (for emojis_json)
     emoji_map = {
         1: "😞",
         3: "☹️",
@@ -90,11 +179,13 @@ def create_checkin(
         10: "😁",
     }
     emoji_selected = emoji_map.get(score_to_save)
-    emoji_json = json.dumps({"selected": emoji_selected, "score": score_to_save}) if emoji_selected else None
+    emoji_json = (
+        json.dumps({"selected": emoji_selected, "score": score_to_save})
+        if emoji_selected
+        else None
+    )
 
-    # IMPORTANT:
-    # - text_note_encrypted is VARBINARY(MAX) -> convert NVARCHAR to VARBINARY
-    # - emojis_json is assumed NVARCHAR(MAX); we pass JSON text
+    # 3) Insert into MoodEntries
     db.execute(
         text("""
             INSERT INTO dbo.MoodEntries
@@ -106,14 +197,14 @@ def create_checkin(
             "uid": user_id,
             "score": score_to_save,
             "label": label_to_save,
-            "note": note_to_save,             # None -> NULL, text -> VARBINARY
-            "emoji_json": emoji_json,         # JSON string or NULL
+            "note": note_to_save,      # None -> NULL, text -> VARBINARY
+            "emoji_json": emoji_json,  # JSON string or NULL
             "ts": now,
         },
     )
     db.commit()
 
-    # Adherence stats
+    # 4) Adherence stats
     streak = _compute_streak(db, user_id)
     avg7 = _rolling_avg(db, user_id, 7)
     avg14 = _rolling_avg(db, user_id, 14)

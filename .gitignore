@@ -31,8 +31,6 @@ htmlcov/
 .envrc
 
 # Virtual environments
-.venv/
-venv/
 env/
 .env/
 
@@ -105,3 +103,7 @@ Desktop.ini
 firebase-debug.log
 *.local
 *.orig
+
+
+
+server/firebase-key.json

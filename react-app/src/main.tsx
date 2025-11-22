@@ -16,6 +16,13 @@ import CheckInPage from "./pages/CheckInPage";
 import MoodTrackPage from "./pages/MoodTrackPage";
 import MoodAnalyzePage from "./pages/MoodAnalyzePage";
 import PositiveNotificationsPage from "./pages/PositiveNotificationsPage";
+import BreathTrainingPage  from "./pages/BreathTrainingPage";
+import Breath874Page  from "./pages/Breathing478Page";
+import DiaphragmaticBreathingPage from "./pages/DiaphragmaticBreathingPage";
+import BoxBreathingPage from "./pages/BoxBreathingPage";
+import CountingBreathingPage from "./pages/CountingBreathsPage";
+import NostrilBreathingPage from "./pages/AlternateNostrilBreathingPage";
+import GuidedBreathingPage from "./pages/GuidedVisualizationBreathingPage";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -38,6 +45,13 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <Route path="/mood-track" element={<MoodTrackPage />} />
         <Route path="/analyze" element={<MoodAnalyzePage />} />
         <Route path="/positive" element={<PositiveNotificationsPage />} />
+        <Route path="/breath" element={<BreathTrainingPage />} />
+        <Route path="/breathing/8-7-4" element={<Breath874Page />} />
+        <Route path="/breathing/diaphragmatic" element={<DiaphragmaticBreathingPage />} />
+        <Route path="/breathing/box" element={<BoxBreathingPage />} />
+        <Route path="/breathing/counting" element={<CountingBreathingPage />} />
+        <Route path="/breathing/alternate-nostril" element={<NostrilBreathingPage />} />
+        <Route path="/breathing/visualization" element={<GuidedBreathingPage />} />
 
       </Routes>
     </BrowserRouter>

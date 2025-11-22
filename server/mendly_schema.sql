@@ -13,28 +13,44 @@ IF OBJECT_ID('dbo.Users','U') IS NOT NULL DROP TABLE dbo.Users;
 CREATE TABLE dbo.Users (
     user_id        UNIQUEIDENTIFIER    NOT NULL CONSTRAINT PK_Users PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
     Username       NVARCHAR(120)       NOT NULL UNIQUE,
-    Email          NVARCHAR(255)       NOT NULL UNIQUE,
     Password       NVARCHAR(256)       NOT NULL,
     Age            SMALLINT            NULL CHECK (Age IS NULL OR (Age BETWEEN 10 AND 120)),
     Gender         TINYINT             NULL CHECK (Gender IN (0,1,2,3)), -- 0=NA,1=F,2=M,3=Other
-    is_admin       BIT                 NOT NULL CONSTRAINT DF_Users_IsAdmin DEFAULT (0),  -- <— added
     is_deleted     BIT                 NOT NULL CONSTRAINT DF_Users_IsDeleted DEFAULT (0),
     created_at     DATETIMEOFFSET      NOT NULL CONSTRAINT DF_Users_Created DEFAULT SYSDATETIMEOFFSET(),
-    updated_at     DATETIMEOFFSET      NOT NULL CONSTRAINT DF_Users_Updated DEFAULT SYSDATETIMEOFFSET()
+    updated_at     DATETIMEOFFSET      NOT NULL CONSTRAINT DF_Users_Updated DEFAULT SYSDATETIMEOFFSET(),
+    Email          NVARCHAR(255)       NOT NULL UNIQUE,
+    is_admin       BIT                 NOT NULL CONSTRAINT DF_Users_IsAdmin DEFAULT (0)
 );
 
 ------------------------------------------------------------
 -- 2) UserSettings  (1–1 مع المستخدم)
 ------------------------------------------------------------
-IF OBJECT_ID('dbo.UserSettings','U') IS NOT NULL DROP TABLE dbo.UserSettings;
+IF OBJECT_ID('dbo.UserSettings','U') IS NOT NULL 
+    DROP TABLE dbo.UserSettings;
+GO
+
 CREATE TABLE dbo.UserSettings (
-    user_id                     UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_UserSettings PRIMARY KEY
-                                 CONSTRAINT FK_UserSettings_Users FOREIGN KEY REFERENCES dbo.Users(user_id) ON DELETE CASCADE,
-    checkin_frequency           TINYINT          NOT NULL CONSTRAINT DF_UserSettings_Freq DEFAULT (3) CHECK (checkin_frequency IN (1,2,3)),
-    motivation_enabled          BIT              NOT NULL CONSTRAINT DF_UserSettings_Motivation DEFAULT (1),
-    created_at                  DATETIMEOFFSET   NOT NULL CONSTRAINT DF_UserSettings_Created DEFAULT SYSDATETIMEOFFSET(),
-    updated_at                  DATETIMEOFFSET   NOT NULL CONSTRAINT DF_UserSettings_Updated DEFAULT SYSDATETIMEOFFSET()
+    user_id   UNIQUEIDENTIFIER NOT NULL 
+              CONSTRAINT PK_UserSettings PRIMARY KEY
+              CONSTRAINT FK_UserSettings_Users 
+                  FOREIGN KEY REFERENCES dbo.Users(user_id) ON DELETE CASCADE,
+    -- 1 = every day, 2 = every 2 days, 3 = every 3 days (example)
+    checkin_frequency TINYINT NOT NULL 
+        CONSTRAINT DF_UserSettings_Freq DEFAULT (3)
+        CONSTRAINT CK_UserSettings_CheckinFreq CHECK (checkin_frequency IN (1,2,3)),
+    motivation_enabled BIT NOT NULL 
+        CONSTRAINT DF_UserSettings_Motivation DEFAULT (1),
+    created_at DATETIMEOFFSET NOT NULL 
+        CONSTRAINT DF_UserSettings_Created DEFAULT SYSDATETIMEOFFSET(),
+    updated_at DATETIMEOFFSET NOT NULL 
+        CONSTRAINT DF_UserSettings_Updated DEFAULT SYSDATETIMEOFFSET(),
+    positive_notif_enabled BIT NOT NULL 
+        CONSTRAINT DF_UserSettings_PosNotifEnabled DEFAULT (1),
+    positive_notif_interval_minutes INT NOT NULL 
+        CONSTRAINT DF_UserSettings_PosNotifInterval DEFAULT (60)
 );
+GO
 
 ------------------------------------------------------------
 -- 3) UserDeviceTokens  (جديد موصى به لـ FCM)
@@ -68,6 +84,51 @@ CREATE TABLE dbo.CheckinSchedule (
     updated_at      DATETIMEOFFSET   NOT NULL CONSTRAINT DF_CheckinSchedule_Updated DEFAULT SYSDATETIMEOFFSET(),
     CONSTRAINT UQ_CheckinSchedule_UserSlot UNIQUE (user_id, slot_name)
 );
+GO
+
+------------------------------------------------------------
+-- Trigger: after insert on Users -> seed UserSettings + CheckinSchedule
+------------------------------------------------------------
+GO
+CREATE OR ALTER TRIGGER dbo.trg_Users_SeedCheckins
+ON dbo.Users
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Ensure UserSettings row
+    INSERT INTO dbo.UserSettings (user_id)
+    SELECT i.user_id
+    FROM inserted i
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.UserSettings s
+        WHERE s.user_id = i.user_id
+    );
+
+    -- Default schedule: morning 09:00, noon 14:00, evening 21:00
+    INSERT INTO dbo.CheckinSchedule (user_id, slot_name, local_hour, local_minute)
+    SELECT 
+        i.user_id,
+        v.slot_name,
+        v.local_hour,
+        v.local_minute
+    FROM inserted i
+    CROSS JOIN (VALUES
+        (N'morning', 9, 0),
+        (N'noon',    14, 0),
+        (N'evening', 21, 0)
+    ) AS v(slot_name, local_hour, local_minute)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM dbo.CheckinSchedule c
+        WHERE c.user_id   = i.user_id
+          AND c.slot_name = v.slot_name
+    );
+END;
+GO
+
 
 ------------------------------------------------------------
 -- 5) MoodEntries
@@ -168,6 +229,96 @@ CREATE TABLE dbo.NotificationQueue (
     error           NVARCHAR(500)    NULL
 );
 CREATE INDEX IX_NotificationQueue_Status_Sched ON dbo.NotificationQueue(status, scheduled_at);
+GO
+
+------------------------------------------------------------
+-- Stored procedure: enqueue daily check-in reminders
+------------------------------------------------------------
+CREATE OR ALTER PROCEDURE dbo.EnqueueDailyCheckinReminders
+    @slot_name NVARCHAR(20)   -- 'morning' / 'noon' / 'evening'
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @now   DATETIMEOFFSET = SYSDATETIMEOFFSET();
+    DECLARE @today DATE           = CONVERT(date, @now);
+
+    -- Insert one reminder per user per day per slot
+    INSERT INTO dbo.NotificationQueue (
+          user_id,
+          token_id,
+          purpose,
+          payload_json,
+          scheduled_at,
+          status
+    )
+    SELECT
+        cs.user_id,
+        NULL,  -- we'll choose device/token later in the sender job
+        N'checkin_reminder',
+        N'{
+            "slot": "' + @slot_name + N'",
+            "title": "Mendly check-in",
+            "body":  "Take 30 seconds to log your ' + @slot_name + N' mood today."
+          }',
+        @now,
+        N'pending'
+    FROM dbo.CheckinSchedule cs
+    WHERE cs.enabled   = 1
+      AND cs.slot_name = @slot_name
+      -- avoid duplicate reminders for same user/slot/date
+      AND NOT EXISTS (
+            SELECT 1
+            FROM dbo.NotificationQueue q
+            WHERE q.user_id  = cs.user_id
+              AND q.purpose  = N'checkin_reminder'
+              AND CONVERT(date, q.scheduled_at) = @today
+              AND q.payload_json LIKE '%"slot":"' + @slot_name + '"%'
+      );
+END
+GO
+
+------------------------------------------------------------
+-- NEW: Stored procedure: enqueue positive notifications (tips)
+-- One "tip" per user per day, for users with positive_notif_enabled = 1
+------------------------------------------------------------
+CREATE OR ALTER PROCEDURE dbo.EnqueuePositiveNotifications
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @now   DATETIMEOFFSET = SYSDATETIMEOFFSET();
+    DECLARE @today DATE           = CONVERT(date, @now);
+
+    INSERT INTO dbo.NotificationQueue (
+          user_id,
+          token_id,
+          purpose,
+          payload_json,
+          scheduled_at,
+          status
+    )
+    SELECT
+        s.user_id,
+        NULL,  -- choose device inside notification_worker
+        N'tip',
+        N'{
+            "title": "Mendly \u2022 A small positive moment",
+            "body":  "Take one small positive pause with Mendly today."
+          }',
+        @now,
+        N'pending'
+    FROM dbo.UserSettings s
+    WHERE s.positive_notif_enabled = 1
+      AND NOT EXISTS (
+            SELECT 1
+            FROM dbo.NotificationQueue q
+            WHERE q.user_id = s.user_id
+              AND q.purpose = N'tip'
+              AND CONVERT(date, q.scheduled_at) = @today
+      );
+END
+GO
 
 ------------------------------------------------------------
 -- 11) AdherenceStats
@@ -248,22 +399,7 @@ CREATE TABLE dbo.AIInteractions (
     created_at      DATETIMEOFFSET   NOT NULL CONSTRAINT DF_AIInteractions_Created DEFAULT SYSDATETIMEOFFSET()
 );
 CREATE INDEX IX_AIInteractions_User_Time ON dbo.AIInteractions(user_id, created_at DESC);
-
-------------------------------------------------------------
--- 16) Feedback  (موصى به)
-------------------------------------------------------------
-IF OBJECT_ID('dbo.Feedback','U') IS NOT NULL DROP TABLE dbo.Feedback;
-CREATE TABLE dbo.Feedback (
-    fb_id       UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_Feedback PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-    user_id     UNIQUEIDENTIFIER NULL
-                  CONSTRAINT FK_Feedback_Users FOREIGN KEY REFERENCES dbo.Users(user_id) ON DELETE SET NULL,
-    kind        NVARCHAR(30)     NOT NULL CHECK (kind IN (N'bug',N'ux',N'idea')),
-    text        NVARCHAR(MAX)    NOT NULL,
-    created_at  DATETIMEOFFSET   NOT NULL CONSTRAINT DF_Feedback_Created DEFAULT SYSDATETIMEOFFSET()
-);
-CREATE INDEX IX_Feedback_User_Time ON dbo.Feedback(user_id, created_at DESC);
-
-
+GO
 
 /* ===== Seed: Admin User (safe to re-run) ===== */
 BEGIN TRY

@@ -3,6 +3,37 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
 import happyMindImg from "../assets/happy-mind.jpg";
+import {
+  getPositiveNotificationSettings,
+  updatePositiveNotificationSettings,
+} from "../api/auth";
+
+// 🔹 API base for calling backend directly
+const API_BASE =
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  "http://localhost:8000";
+
+// 🔹 Test messages for the "Send test" button
+const TEST_POSITIVE_MESSAGES: string[] = [
+  "Take one slow deep breath. You’re doing better than you think 🌱",
+  "Mini reset: roll your shoulders, unclench your jaw, sip some water 💧",
+  "You’ve already handled so much. One small step is enough for now 💛",
+  "Reminder: you are not alone. Reaching out is a strength, not a weakness 🤝",
+  "Pause for 10 seconds and notice 3 things you can see around you 👀",
+  "Your feelings matter. Treat yourself today like you would a close friend 💬",
+  "Small progress still counts. What’s one tiny win you can do next? ✅",
+  "You deserve rest, not just productivity. Take a gentle break when you can 💤",
+  "Notice one thing you appreciate about yourself right now ✨",
+  "You’re allowed to start again, as many times as you need 🌈",
+];
+
+function getRandomPositiveMessage(): string {
+  if (!TEST_POSITIVE_MESSAGES.length) {
+    return "You’re doing better than you think 🌱";
+  }
+  const idx = Math.floor(Math.random() * TEST_POSITIVE_MESSAGES.length);
+  return TEST_POSITIVE_MESSAGES[idx];
+}
 
 const PositiveNotificationsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -12,26 +43,101 @@ const PositiveNotificationsPage: React.FC = () => {
   const GREEN = "#10B981";
 
   // ===== STATE =====
-  const [enabled, setEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem("positive_notifications_enabled");
-    return saved ? JSON.parse(saved) : true;
-  });
+  const [enabled, setEnabled] = useState<boolean>(true);
+  const [frequency, setFrequency] = useState<string>("60");
+  const [loadingSettings, setLoadingSettings] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
-  const [frequency, setFrequency] = useState<string>(() => {
-    const saved = localStorage.getItem("positive_notifications_frequency");
-    return saved || "60"; // default: every 60 minutes
-  });
-
+  // 🔁 Load settings from backend when page mounts
   useEffect(() => {
-    localStorage.setItem(
-      "positive_notifications_enabled",
-      JSON.stringify(enabled)
-    );
-  }, [enabled]);
+    let isMounted = true;
 
+    (async () => {
+      try {
+        const data = await getPositiveNotificationSettings();
+        if (!isMounted) return;
+
+        setEnabled(data.enabled);
+        setFrequency(String(data.frequency_minutes));
+      } catch (e: any) {
+        console.error("Failed to load positive notification settings:", e);
+        if (isMounted) {
+          setStatusMsg(
+            e?.message || "Could not load your settings, using defaults."
+          );
+        }
+      } finally {
+        if (isMounted) setLoadingSettings(false);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // we keep this empty – backend-driven push now
   useEffect(() => {
-    localStorage.setItem("positive_notifications_frequency", frequency);
-  }, [frequency]);
+    if (loadingSettings) return;
+  }, [enabled, frequency, loadingSettings]);
+
+  // ===== HANDLERS =====
+  const handleUpdateClick = async () => {
+    setSaving(true);
+    setStatusMsg(null);
+    try {
+      const minutes = parseInt(frequency, 10);
+      const payload = {
+        enabled,
+        frequency_minutes: isNaN(minutes) ? 60 : minutes,
+      };
+
+      await updatePositiveNotificationSettings(payload);
+      setStatusMsg("Settings updated ✅");
+    } catch (e: any) {
+      console.error("Failed to update positive notifications:", e);
+      setStatusMsg(e?.message || "Failed to update settings.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 🔹 NEW: ask backend to enqueue a test positive notification (FCM push)
+  const handleSendTestClick = async () => {
+    try {
+      const token = window.localStorage.getItem("access_token");
+      if (!token) {
+        alert("You must be logged in to send a test notification.");
+        return;
+      }
+
+      const body = getRandomPositiveMessage();
+
+      const res = await fetch(
+        `${API_BASE}/positive-notifications/send-test`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ body }),
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("send-test failed:", res.status, text);
+        setStatusMsg("Failed to enqueue test notification.");
+      } else {
+        setStatusMsg("Test notification enqueued ✅ Check your device.");
+      }
+    } catch (err) {
+      console.error("Error sending test notification:", err);
+      setStatusMsg("Error sending test notification.");
+    }
+  };
 
   // ===== STYLES (same base as Journey) =====
   const screenStyle: React.CSSProperties = {
@@ -53,7 +159,7 @@ const PositiveNotificationsPage: React.FC = () => {
     maxWidth: "450px",
     margin: "0 auto",
     backgroundColor: BLUE,
-    borderRadius: 0, // rectangle like Journey
+    borderRadius: 0,
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
@@ -133,7 +239,6 @@ const PositiveNotificationsPage: React.FC = () => {
     color: "#5F8DD0",
   };
 
-  // CONTENT: no top/side padding so image can be full-width and touch nav
   const bottomSectionStyle: React.CSSProperties = {
     flex: 1,
     padding: "0 0 16px 0",
@@ -147,7 +252,6 @@ const PositiveNotificationsPage: React.FC = () => {
     overflowX: "hidden",
   };
 
-  // inner container for card with side padding
   const innerContentStyle: React.CSSProperties = {
     width: "100%",
     padding: "0 22px",
@@ -155,7 +259,7 @@ const PositiveNotificationsPage: React.FC = () => {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    marginTop:15
+    marginTop: 3,
   };
 
   const cardStyle: React.CSSProperties = {
@@ -168,11 +272,10 @@ const PositiveNotificationsPage: React.FC = () => {
     boxSizing: "border-box",
   };
 
-  // full-width header image, right under the nav
   const headerImagePlaceholder: React.CSSProperties = {
     width: "100%",
     height: 200,
-    borderRadius: 0, // no rounded corners so it meets edges
+    borderRadius: 0,
     overflow: "hidden",
     display: "flex",
     alignItems: "center",
@@ -262,7 +365,39 @@ const PositiveNotificationsPage: React.FC = () => {
     fontWeight: 600,
   };
 
-  // helper to show frequency text
+  const updateButtonStyle: React.CSSProperties = {
+    marginTop: 16,
+    width: "100%",
+    borderRadius: 999,
+    backgroundColor: "#F4C58F",
+    border: "none",
+    paddingBlock: 10,
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#3565AF",
+    cursor: saving ? "wait" : "pointer",
+  };
+
+  const testButtonStyle: React.CSSProperties = {
+    marginTop: 8,
+    width: "100%",
+    borderRadius: 999,
+    backgroundColor: "#E5E7EB",
+    border: "none",
+    paddingBlock: 10,
+    fontSize: 14,
+    fontWeight: 500,
+    color: "#111827",
+    cursor: "pointer",
+  };
+
+  const statusMsgStyle: React.CSSProperties = {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#6b7280",
+    textAlign: "center",
+  };
+
   const describeFrequency = (value: string): string => {
     switch (value) {
       case "15":
@@ -281,6 +416,26 @@ const PositiveNotificationsPage: React.FC = () => {
         return "regularly";
     }
   };
+
+  if (loadingSettings) {
+    return (
+      <div style={screenStyle}>
+        <div style={phoneStyle}>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+            }}
+          >
+            Loading your settings…
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={screenStyle}>
@@ -324,7 +479,6 @@ const PositiveNotificationsPage: React.FC = () => {
 
         {/* CONTENT */}
         <div style={bottomSectionStyle}>
-          {/* full-width hero image, stuck to top nav */}
           <div style={headerImagePlaceholder}>
             <img
               src={happyMindImg}
@@ -338,10 +492,8 @@ const PositiveNotificationsPage: React.FC = () => {
             />
           </div>
 
-          {/* inner content with padding */}
           <div style={innerContentStyle}>
             <div style={cardStyle}>
-              {/* Frequency select */}
               <div>
                 <div style={labelStyle}>
                   How often do you want to receive positive notifications?
@@ -360,7 +512,6 @@ const PositiveNotificationsPage: React.FC = () => {
                 </select>
               </div>
 
-              {/* Toggle */}
               <div style={toggleRowStyle}>
                 <div style={toggleLabelStyle}>
                   Positive notifications {enabled ? "ON" : "OFF"}
@@ -383,6 +534,27 @@ const PositiveNotificationsPage: React.FC = () => {
                     )}.`
                   : "Positive notifications are turned off. Turn them on to start receiving them again."}
               </div>
+
+              {/* UPDATE BUTTON */}
+              <button
+                type="button"
+                style={updateButtonStyle}
+                onClick={handleUpdateClick}
+                disabled={saving}
+              >
+                {saving ? "Updating…" : "Update"}
+              </button>
+
+              {/* 🔹 TEST BUTTON → sends FCM push via backend */}
+              <button
+                type="button"
+                style={testButtonStyle}
+                onClick={handleSendTestClick}
+              >
+                Send test positive notification
+              </button>
+
+              {statusMsg && <div style={statusMsgStyle}>{statusMsg}</div>}
             </div>
           </div>
         </div>

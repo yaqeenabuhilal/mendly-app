@@ -1,5 +1,5 @@
 // react-app/src/pages/MoodAnalyzePage.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
 import { getMoodSeries, type SeriesPoint } from "../api/auth";
@@ -44,7 +44,7 @@ const MoodAnalyzePage: React.FC = () => {
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
-    height:40 // ⬅️ no rounded corners
+    height: 40, // ⬅️ no rounded corners
   };
 
   const iconBtn: React.CSSProperties = {
@@ -63,7 +63,6 @@ const MoodAnalyzePage: React.FC = () => {
     fontSize: 20,
     boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
   };
-  const homeBtn: React.CSSProperties = { ...iconBtn, left: 12 };
   const logoutBtn: React.CSSProperties = { ...iconBtn, right: 12 };
 
   const titleBlock: React.CSSProperties = {
@@ -151,22 +150,6 @@ const MoodAnalyzePage: React.FC = () => {
     lineHeight: 1.5,
   };
 
-  const ctaWrap: React.CSSProperties = {
-    marginTop: 6,
-    display: "flex",
-    justifyContent: "center",
-  };
-  const ctaBtn: React.CSSProperties = {
-    border: "none",
-    borderRadius: 12,
-    padding: "12px 16px",
-    backgroundColor: "#3970aa",
-    color: CREAM,
-    fontWeight: 800,
-    cursor: "pointer",
-    boxShadow: "0 8px 20px rgba(0,0,0,0.18)",
-  };
-
   // bottom nav (rectangle)
   const bottomNav: React.CSSProperties = {
     width: "100%",
@@ -178,7 +161,7 @@ const MoodAnalyzePage: React.FC = () => {
     justifyContent: "space-between",
     boxSizing: "border-box",
     boxShadow: "0 -2px 10px rgba(15,23,42,0.15)",
-    height:50
+    height: 50,
   };
   const navItem: React.CSSProperties = {
     display: "flex",
@@ -193,11 +176,37 @@ const MoodAnalyzePage: React.FC = () => {
     fontWeight: 600,
   };
 
+  const homeBtnStyle: React.CSSProperties = { ...iconBtn, left: 12 };
+
+  // 🔼 scroll-to-top button style
+  const scrollTopBtnStyle: React.CSSProperties = {
+    position: "absolute",
+    right: 20,
+    bottom: 70,
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    border: "none",
+    backgroundColor: "#3970aaff",
+    color: CREAM,
+    cursor: "pointer",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 22,
+    zIndex: 10,
+  };
+
   // -------- data / helpers --------
   const [s1, setS1] = useState<SeriesPoint[] | null>(null);
   const [s7, setS7] = useState<SeriesPoint[] | null>(null);
   const [s14, setS14] = useState<SeriesPoint[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // 🔼 state + ref for scroll-top
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -284,6 +293,13 @@ const MoodAnalyzePage: React.FC = () => {
     [s14]
   );
 
+  // 🔼 scroll-to-top handler
+  const handleScrollTop = () => {
+    if (bodyRef.current) {
+      bodyRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   return (
     <div style={screen}>
       <div style={phone}>
@@ -291,12 +307,12 @@ const MoodAnalyzePage: React.FC = () => {
         <div style={top}>
           <button
             type="button"
-            style={homeBtn}
-            onClick={() => navigate("/journey")}
-            aria-label="Home"
-            title="Home"
+            style={homeBtnStyle}
+            onClick={() => navigate("/mood-track")}
+            aria-label="Back"
+            title="Back"
           >
-            🏠
+            ⬅
           </button>
 
           <div style={titleBlock}>
@@ -306,7 +322,7 @@ const MoodAnalyzePage: React.FC = () => {
               </span>
               Mendly App
             </div>
-            <span style={headerTitle}>Analyze</span>
+            <span style={headerTitle}>Mood Analyze</span>
           </div>
 
           <button
@@ -325,7 +341,13 @@ const MoodAnalyzePage: React.FC = () => {
         </div>
 
         {/* BODY */}
-        <div style={body}>
+        <div
+          style={body}
+          ref={bodyRef}
+          onScroll={(e) => {
+            setShowScrollTop(e.currentTarget.scrollTop > 60);
+          }}
+        >
           <div style={inner}>
             {err && (
               <div
@@ -424,28 +446,28 @@ const MoodAnalyzePage: React.FC = () => {
                 </p>
               )}
               <ul style={bullets}>
-                <li>
-                  Compare weekdays vs. weekends—do routines shift mood?
-                </li>
+                <li>Compare weekdays vs. weekends—do routines shift mood?</li>
                 <li>
                   If 3+ days &lt; 4, reduce training load and prioritize sleep &
                   protein.
                 </li>
               </ul>
             </div>
-
-            {/* Back to Mood Track */}
-            <div style={ctaWrap}>
-              <button
-                type="button"
-                style={ctaBtn}
-                onClick={() => navigate("/mood-track")}
-              >
-                Go back to Mood Track page
-              </button>
-            </div>
           </div>
         </div>
+
+        {/* 🔼 SCROLL TO TOP BUTTON */}
+        {showScrollTop && (
+          <button
+            type="button"
+            style={scrollTopBtnStyle}
+            onClick={handleScrollTop}
+            aria-label="Back to top"
+            title="Back to top"
+          >
+            ↑
+          </button>
+        )}
 
         {/* BOTTOM NAV */}
         <div style={bottomNav}>
@@ -457,6 +479,16 @@ const MoodAnalyzePage: React.FC = () => {
           >
             <div style={{ fontSize: 22 }}>👤</div>
             <div>Profile</div>
+          </button>
+
+          <button
+            type="button"
+            style={navItem}
+            onClick={() => navigate("/journey")}
+            aria-label="Home"
+            title="Home"
+          >
+            <div style={{ fontSize: 22 }}>🏠</div>
           </button>
 
           <button

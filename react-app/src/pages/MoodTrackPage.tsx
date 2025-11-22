@@ -1,5 +1,5 @@
 // react-app/src/pages/MoodTrackPage.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
 import { getMoodSeries, type SeriesPoint } from "../api/auth";
@@ -47,7 +47,7 @@ const MoodTrackPage: React.FC = () => {
     alignItems: "center",
     justifyContent: "center",
     position: "relative", // ⬅️ no rounded bottom
-    height:45
+    height: 45,
   };
 
   const iconBtn: React.CSSProperties = {
@@ -150,7 +150,7 @@ const MoodTrackPage: React.FC = () => {
     justifyContent: "space-between",
     boxSizing: "border-box",
     boxShadow: "0 -2px 10px rgba(15,23,42,0.15)",
-    height:50
+    height: 50,
   };
   const navItemStyle: React.CSSProperties = {
     display: "flex",
@@ -165,11 +165,35 @@ const MoodTrackPage: React.FC = () => {
     fontWeight: 600,
   };
 
+  // 🔼 scroll-to-top button style
+  const scrollTopBtnStyle: React.CSSProperties = {
+    position: "absolute",
+    right: 20,
+    bottom: 70, // a bit above bottom nav
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    border: "none",
+    backgroundColor: "#3970aaff",
+    color: CREAM,
+    cursor: "pointer",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 22,
+    zIndex: 10,
+  };
+
   // ---------- data ----------
   const [today, setToday] = useState<SeriesPoint[] | null>(null);
   const [raw7, setRaw7] = useState<SeriesPoint[] | null>(null);
   const [raw14, setRaw14] = useState<SeriesPoint[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  // 🔼 state + ref for scroll-top visibility
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -177,7 +201,7 @@ const MoodTrackPage: React.FC = () => {
         setErr(null);
         const [s1, s7, s14] = await Promise.all([
           getMoodSeries(1),
-          getMoodSeries(14),
+          getMoodSeries(7),
           getMoodSeries(14),
         ]);
         setToday(sortAsc(s1));
@@ -435,6 +459,13 @@ const MoodTrackPage: React.FC = () => {
             : null;
         })();
 
+  // 🔼 scroll to top handler
+  const handleScrollTop = () => {
+    if (contentRef.current) {
+      contentRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
   return (
     <div style={screenStyle}>
       <div style={phoneStyle}>
@@ -476,7 +507,13 @@ const MoodTrackPage: React.FC = () => {
         </div>
 
         {/* CONTENT */}
-        <div style={contentStyle}>
+        <div
+          style={contentStyle}
+          ref={contentRef}
+          onScroll={(e) => {
+            setShowScrollTop(e.currentTarget.scrollTop > 60);
+          }}
+        >
           <div style={contentInner}>
             {err && (
               <div
@@ -552,6 +589,19 @@ const MoodTrackPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* 🔼 SCROLL TO TOP BUTTON */}
+        {showScrollTop && (
+          <button
+            type="button"
+            style={scrollTopBtnStyle}
+            onClick={handleScrollTop}
+            aria-label="Back to top"
+            title="Back to top"
+          >
+            ↑
+          </button>
+        )}
 
         {/* BOTTOM NAV */}
         <div style={bottomNavStyle}>

@@ -2,7 +2,7 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
-import thankYouImg from "../assets/thank-you.png"; // ⬅️ add your image here
+import thankYouImg from "../assets/thank-you.png"; // ⬅️ your image
 
 const CheckInPage: React.FC = () => {
   const navigate = useNavigate();
@@ -14,24 +14,38 @@ const CheckInPage: React.FC = () => {
   // ----- state -----
   const [note, setNote] = useState("");
   const [label, setLabel] = useState<string>("");
-  const [score, setScore] = useState<number | null>(null);
+  const [emojiScore, setEmojiScore] = useState<number | null>(null); // ⬅️ emoji-only score
+  const [listScore, setListScore] = useState<number | null>(null); // ⬅️ list-only score
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const [showThanks, setShowThanks] = useState(false); // ⬅️ for thank-you screen
+  const [showThanks, setShowThanks] = useState(false);
 
-  // emojis
+  // emojis + meaning text
   const emojiScale = useMemo(
     () =>
       [
-        { v: 1, e: "😞" },
-        { v: 3, e: "☹️" },
-        { v: 5, e: "😐" },
-        { v: 7, e: "🙂" },
-        { v: 9, e: "😊" },
-        { v: 10, e: "😁" },
+        { v: 1, e: "😞", meaning: "Very bad" },
+        { v: 3, e: "☹️", meaning: "Bad" },
+        { v: 5, e: "😐", meaning: "Neutral" },
+        { v: 7, e: "🙂", meaning: "Okay" },
+        { v: 9, e: "😊", meaning: "Good" },
+        { v: 10, e: "😁", meaning: "Happy" },
       ] as const,
     []
   );
+
+  // dropdown feelings -> its OWN scores (not tied to emoji selection)
+  const DROPDOWN_SCORES: Record<string, number> = {
+    anxious: 1,
+    stressed: 3,
+    tired: 5,
+    calm: 7,
+    excited: 9,
+    happy: 10,
+  };
+
+  const currentEmoji =
+    emojiScore != null ? emojiScale.find((item) => item.v === emojiScore) : undefined;
 
   // ===== shared styles =====
   const screenStyle: React.CSSProperties = {
@@ -61,7 +75,7 @@ const CheckInPage: React.FC = () => {
     position: "relative",
   };
 
-  // ===== header (same layout as Journey) =====
+  // ===== header =====
   const topSectionStyle: React.CSSProperties = {
     backgroundColor: CREAM,
     paddingTop: 20,
@@ -173,12 +187,14 @@ const CheckInPage: React.FC = () => {
     justifyContent: "center",
     alignItems: "center",
     marginTop: 4,
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
+    overflowX: "auto",
+    width: "100%",
   };
 
   const emojiBtn = (active: boolean): React.CSSProperties => ({
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     borderRadius: "50%",
     display: "flex",
     alignItems: "center",
@@ -187,7 +203,16 @@ const CheckInPage: React.FC = () => {
     cursor: "pointer",
     border: active ? "2px solid #3565AF" : "1px solid #d6cbb9",
     background: active ? "#fff" : "#faf7f1",
+    flexShrink: 0,
   });
+
+  const emojiMeaningStyle: React.CSSProperties = {
+    marginTop: 10,
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#374151",
+  };
 
   const actionsRow: React.CSSProperties = {
     display: "flex",
@@ -234,7 +259,7 @@ const CheckInPage: React.FC = () => {
     fontWeight: 600,
   };
 
-    // --- thank-you overlay styles ---
+  // --- thank-you overlay styles ---
   const thankScreenStyle: React.CSSProperties = {
     position: "relative",
     width: "100%",
@@ -266,26 +291,68 @@ const CheckInPage: React.FC = () => {
     animationTimingFunction: "ease-in-out",
   };
 
-
   // ----- helpers -----
   const anyFieldFilled =
-    (note && note.trim().length > 0) || label !== "" || score !== null;
+    (note && note.trim().length > 0) ||
+    label !== "" ||
+    emojiScore !== null ||
+    listScore !== null;
 
   const clearAll = () => {
     setNote("");
     setLabel("");
-    setScore(null);
+    setEmojiScore(null);
+    setListScore(null);
     setMsg("Cleared ✨");
   };
 
   // ----- handlers -----
+
+  // NOTE FIELD – when user types here, clear emoji & list
+  const handleNoteChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+    const value = e.target.value;
+    setNote(value);
+    if (value.trim().length > 0) {
+      setLabel("");
+      setEmojiScore(null);
+      setListScore(null);
+    }
+  };
+
+  // EMOJI CLICK – when user picks emoji, clear note & list
+  const handleEmojiClick = (value: number) => {
+    setEmojiScore(value);
+    setListScore(null);
+    setNote("");
+    setLabel("");
+  };
+
+  // SELECT CHANGE – when user picks from box, clear note & emoji,
+  // and set listScore (but NOT emojiScore)
+  const handleLabelChange: React.ChangeEventHandler<HTMLSelectElement> = (e) => {
+    const value = e.target.value;
+    if (!value) {
+      setLabel("");
+      setListScore(null);
+      return;
+    }
+    setLabel(value);
+    setNote("");
+    setEmojiScore(null);
+    setListScore(DROPDOWN_SCORES[value] ?? null);
+  };
+
   async function sendCheckin() {
     try {
       setSending(true);
       setMsg(null);
+
+      // final numeric score we send to backend
+      const finalScore = emojiScore ?? listScore ?? null;
+
       const { submitMoodCheckin } = await import("../api/auth");
       await submitMoodCheckin({
-        score: score ?? null,
+        score: finalScore,
         label: label || null,
         note: note.trim() || null,
       });
@@ -293,14 +360,15 @@ const CheckInPage: React.FC = () => {
       // clear form
       setNote("");
       setLabel("");
-      setScore(null);
+      setEmojiScore(null);
+      setListScore(null);
       setMsg(null);
 
       // show thank-you screen then navigate to journey
       setShowThanks(true);
       setTimeout(() => {
         navigate("/journey");
-      }, 3000); // ~3 seconds
+      }, 3000);
     } catch (e: any) {
       setMsg(e?.message || "Failed to save");
     } finally {
@@ -309,7 +377,6 @@ const CheckInPage: React.FC = () => {
   }
 
   // ===== special "Thank You" screen =====
-   // ===== special "Thank You" screen =====
   if (showThanks) {
     return (
       <div style={screenStyle}>
@@ -354,7 +421,6 @@ const CheckInPage: React.FC = () => {
     );
   }
 
-
   // ===== normal screen =====
   return (
     <div style={screenStyle}>
@@ -398,47 +464,58 @@ const CheckInPage: React.FC = () => {
 
         {/* CONTENT */}
         <div style={contentStyle}>
+          {/* NOTE CARD */}
           <div style={card}>
-            <div style={labelStyle}>Who do u feel today?</div>
+            <div style={labelStyle}>How do you feel today?</div>
             <input
               style={inputStyle}
-              placeholder="Tell us"
+              placeholder="Tell us in your own words"
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={handleNoteChange}
             />
           </div>
 
+          {/* EMOJI CARD */}
           <div style={card}>
-            <div style={labelStyle}>Or choose Emoji reflect ur feel</div>
+            <div style={labelStyle}>
+              Or choose an emoji that reflects your feeling
+            </div>
             <div style={emojiRow}>
               {emojiScale.map((item) => (
                 <button
                   key={item.v}
                   type="button"
-                  style={emojiBtn(score === item.v)}
-                  onClick={() => setScore(item.v)}
+                  style={emojiBtn(emojiScore === item.v)}
+                  onClick={() => handleEmojiClick(item.v)}
                   aria-label={`score-${item.v}`}
                 >
                   {item.e}
                 </button>
               ))}
             </div>
+            {currentEmoji && (
+              <div style={emojiMeaningStyle}>
+                You selected: <strong>{currentEmoji.meaning}</strong> (
+                {currentEmoji.v}/10)
+              </div>
+            )}
           </div>
 
+          {/* SELECT CARD */}
           <div style={card}>
-            <div style={labelStyle}>Also u can choose from this box</div>
+            <div style={labelStyle}>Or choose a feeling from the list</div>
             <select
               style={{ ...inputStyle, background: "#fff" }}
               value={label}
-              onChange={(e) => setLabel(e.target.value)}
+              onChange={handleLabelChange}
             >
               <option value="">— Select feeling —</option>
-              <option value="calm">Calm</option>
-              <option value="happy">Happy</option>
+              <option value="anxious">Anxious</option>
               <option value="stressed">Stressed</option>
               <option value="tired">Tired</option>
-              <option value="anxious">Anxious</option>
+              <option value="calm">Calm</option>
               <option value="excited">Excited</option>
+              <option value="happy">Happy</option>
             </select>
 
             {msg && (
@@ -448,6 +525,7 @@ const CheckInPage: React.FC = () => {
             )}
           </div>
 
+          {/* ACTIONS */}
           <div style={actionsRow}>
             <button
               type="button"
@@ -468,7 +546,7 @@ const CheckInPage: React.FC = () => {
               disabled={sending || !anyFieldFilled}
               onClick={sendCheckin}
               title={
-                !anyFieldFilled ? "Fill note, label or emoji" : "Send check-in"
+                !anyFieldFilled ? "Fill note, emoji or feeling" : "Send check-in"
               }
             >
               {sending ? "Sending…" : "Send"}

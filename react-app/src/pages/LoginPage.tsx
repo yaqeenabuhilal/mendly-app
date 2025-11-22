@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login } from "../api/auth";
 import logo from "../assets/mendly-logo.jpg"; // <-- your logo file
+import { registerDeviceWithBackend } from "../utils/registerDevice";
 
 const LoginPage: React.FC = () => {
   const [username, setUsername] = useState("");
@@ -18,6 +19,11 @@ const LoginPage: React.FC = () => {
     try {
       const token = await login({ username, password });
       localStorage.setItem("access_token", token.access_token);
+        // NEW: register device for push notifications
+        registerDeviceWithBackend(token.access_token).catch((err) =>
+        console.error("Failed to register device:", err)
+      );
+
       navigate("/journey");
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? "Login failed");

@@ -79,3 +79,9 @@ class MoodDaySummary(BaseModel):
 class JourneyOverview(BaseModel):
     settings: UserSettingsPublic
     last7days: List[MoodDaySummary]
+
+
+class DeviceRegister(BaseModel):
+    fcm_token: str
+    platform: str  # 'android' or 'ios'
+    app_version: Optional[str] = None
