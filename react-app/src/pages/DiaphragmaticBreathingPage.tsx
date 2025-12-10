@@ -2,6 +2,7 @@
 import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
+import bellyImg from "../assets/belly.png";
 
 const DiaphragmaticBreathingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -10,11 +11,11 @@ const DiaphragmaticBreathingPage: React.FC = () => {
   const CREAM = "#f5e9d9";
   const PURPLE = "#5B5FEF";
 
-  // scroll-to-practice + scroll-to-top
+  // refs + state
   const practiceRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const practiceButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
 
   const handleScrollToPractice = () => {
     practiceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -24,24 +25,15 @@ const DiaphragmaticBreathingPage: React.FC = () => {
     contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleContentScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget;
-    const scrolled = target.scrollTop;
-
-    let buttonVisible = false;
-    if (practiceButtonRef.current && contentRef.current) {
-      const btnRect = practiceButtonRef.current.getBoundingClientRect();
-      const contentRect = contentRef.current.getBoundingClientRect();
-      // button is visible if it overlaps the visible scroll area
-      buttonVisible =
-        btnRect.top < contentRect.bottom && btnRect.bottom > contentRect.top;
-    }
-
-    // show arrow only if user is not at the top AND button is NOT visible
-    setShowScrollTop(scrolled > 20 && !buttonVisible);
+  // open YouTube INSIDE app (modal)
+  const handleVideoClick = (
+    e: React.MouseEvent<HTMLAnchorElement, MouseEvent>
+  ) => {
+    e.preventDefault();
+    setShowVideoModal(true);
   };
 
-  // ===== STYLES =====
+  // ===== STYLES (copied from Breathing874Page style language) =====
   const screenStyle: React.CSSProperties = {
     height: "100vh",
     width: "100vw",
@@ -69,116 +61,133 @@ const DiaphragmaticBreathingPage: React.FC = () => {
     position: "relative",
   };
 
+  // same small top bar as Breathing874Page
   const topSectionStyle: React.CSSProperties = {
     backgroundColor: CREAM,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 6,
+    paddingBottom: 6,
     paddingInline: 16,
     display: "flex",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
-    height: 50,
   };
 
   const iconBtn: React.CSSProperties = {
     position: "absolute",
-    top: 14,
-    width: 42,
-    height: 42,
+    top: 8,
+    width: 35,
+    height: 35,
     borderRadius: 999,
     border: "none",
     cursor: "pointer",
-    backgroundColor: "#3970aaff",
+    backgroundColor: "#3970aa",
     color: CREAM,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 20,
+    fontSize: 16,
     boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
   };
 
-  const homeBtnStyle: React.CSSProperties = { ...iconBtn, left: 12 };
-  const logoutBtnStyle: React.CSSProperties = { ...iconBtn, right: 12 };
+  const homeBtnStyle: React.CSSProperties = { ...iconBtn, left: 16 };
+  const logoutBtnStyle: React.CSSProperties = { ...iconBtn, right: 16 };
 
-  const titleBlockStyle: React.CSSProperties = {
+  const logoBlockStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    gap: 2,
     alignItems: "center",
+    gap: 4,
   };
 
-  const smallLabelStyle: React.CSSProperties = {
-    color: "#5F8DD0",
-    fontSize: 14,
-    fontWeight: 600,
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-  };
-
-  const tinyLogoStyle: React.CSSProperties = {
-    width: 28,
-    height: 28,
+  const logoCircleStyle: React.CSSProperties = {
+    width: 40,
+    height: 40,
     borderRadius: "50%",
     overflow: "hidden",
     backgroundColor: CREAM,
-    display: "inline-flex",
+    display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
   };
 
-  const tinyLogoImgStyle: React.CSSProperties = {
+  const logoImgStyle: React.CSSProperties = {
     width: "130%",
     height: "130%",
     objectFit: "cover",
   };
 
-  const headerTitleStyle: React.CSSProperties = {
-    fontFamily: '"Times New Roman", Georgia, serif',
-    fontSize: 22,
+  const appNameStyle: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
     color: "#5F8DD0",
+    letterSpacing: 0.5,
   };
 
   const contentStyle: React.CSSProperties = {
     flex: 1,
     backgroundColor: BLUE,
-    padding: "10px 20px 16px 20px",
+    padding: "18px 24px 16px 24px",
     display: "flex",
     flexDirection: "column",
-    gap: 14,
-    color: "#111827",
+    gap: 16,
+    color: "#f9fafb",
     overflowY: "auto",
   };
 
-  // arrow just under the nav to jump to practice
+  const heroTitleStyle: React.CSSProperties = {
+    fontSize: 26,
+    fontWeight: 700,
+    textAlign: "center",
+    marginBottom: 6,
+  };
+
+  // hero image (belly.png)
+  const heroImageWrapperStyle: React.CSSProperties = {
+      marginTop: 4,
+      marginBottom: 10,
+      display: "flex",
+      justifyContent: "center",
+      backgroundColor: BLUE,      // same as page
+      borderRadius: 0,
+      overflow: "hidden",
+    };
+  
+    const heroImageStyle: React.CSSProperties = {
+      width: "100%",
+      height: 150,
+      maxWidth: 580,
+      display: "block",
+      mixBlendMode: "multiply",   // white turns into background color
+    };
+
+  const dividerStyle: React.CSSProperties = {
+    textAlign: "center",
+    letterSpacing: 4,
+    margin: "12px 0 4px 0",
+  };
+
   const scrollArrowWrapperStyle: React.CSSProperties = {
-    top: 0,
-    zIndex: 10,
     display: "flex",
     justifyContent: "center",
-    paddingTop: 4,
-    paddingBottom: 4,
-    backgroundColor: BLUE,
+    marginTop: 4,
+    marginBottom: 4,
   };
 
   const scrollArrowButtonStyle: React.CSSProperties = {
-    width: "100%",
-    height: 30,
-    borderRadius: "40%",
+    borderRadius: 999,
     border: "none",
     backgroundColor: "#F4C58F",
     color: "#3565AF",
     cursor: "pointer",
+    padding: "6px 14px",
     boxShadow: "0 4px 12px rgba(15,23,42,0.35)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 18,
+    fontSize: 14,
+    fontWeight: 600,
   };
 
-  // scroll-to-top button
   const scrollTopBtnStyle: React.CSSProperties = {
     position: "absolute",
     right: 20,
@@ -187,7 +196,7 @@ const DiaphragmaticBreathingPage: React.FC = () => {
     height: 40,
     borderRadius: 999,
     border: "none",
-    backgroundColor: "#3970aaff",
+    backgroundColor: "#3970aa",
     color: CREAM,
     cursor: "pointer",
     boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
@@ -200,19 +209,15 @@ const DiaphragmaticBreathingPage: React.FC = () => {
 
   const sectionTitleStyle: React.CSSProperties = {
     marginTop: 8,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 700,
-    color: "#f9fafb",
+    color: "#ffffff",
   };
 
-  const textCardStyle: React.CSSProperties = {
-    backgroundColor: CREAM,
-    borderRadius: 20,
-    padding: "14px 14px 16px 14px",
-    boxShadow: "0 8px 20px rgba(15,23,42,0.18)",
+  const textBlockStyle: React.CSSProperties = {
     fontSize: 14,
-    lineHeight: 1.5,
-    color: "#111827",
+    lineHeight: 1.6,
+    color: "#f9fafb",
   };
 
   const tipsListStyle: React.CSSProperties = {
@@ -222,13 +227,12 @@ const DiaphragmaticBreathingPage: React.FC = () => {
   };
 
   const videoCardStyle: React.CSSProperties = {
-    ...textCardStyle,
-    padding: "12px 12px 14px 12px",
+    ...textBlockStyle,
   };
 
   const videoThumbStyle: React.CSSProperties = {
     marginTop: 8,
-    borderRadius: 16,
+    borderRadius: 24,
     overflow: "hidden",
     background:
       "linear-gradient(135deg, #111827, #1f2937 40%, #2563eb 70%, #60a5fa)",
@@ -262,10 +266,27 @@ const DiaphragmaticBreathingPage: React.FC = () => {
     textShadow: "0 2px 6px rgba(0,0,0,0.6)",
   };
 
-  // practice card
-  const practiceCardStyle: React.CSSProperties = {
-    ...textCardStyle,
+  const videoFrameWrapperStyle: React.CSSProperties = {
+    width: "100%",
+    aspectRatio: "16 / 9",
+    borderRadius: 16,
+    overflow: "hidden",
+    marginTop: 8,
+  };
+
+  const videoIframeStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    border: "none",
+  };
+
+  // practice section
+  const practiceSectionStyle: React.CSSProperties = {
+    ...textBlockStyle,
     textAlign: "center",
+    backgroundColor: "rgba(249, 250, 251, 0.08)",
+    borderRadius: 16,
+    padding: "14px 12px",
   };
 
   const practiceButtonStyle: React.CSSProperties = {
@@ -308,21 +329,47 @@ const DiaphragmaticBreathingPage: React.FC = () => {
     fontWeight: 600,
   };
 
-  const handleVideoClick = (
-    e: React.MouseEvent<HTMLAnchorElement, MouseEvent>
-  ) => {
-    e.preventDefault();
-    window.open(
-      "https://www.youtube.com/watch?v=9jpchJcKivk",
-      "_blank",
-      "noopener,noreferrer"
-    );
+  // modal (reuse from 4-7-8 page)
+  const modalOverlayStyle: React.CSSProperties = {
+    position: "absolute",
+    inset: 0,
+    backgroundColor: "rgba(15,23,42,0.55)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    zIndex: 30,
+  };
+
+  const modalCardStyle: React.CSSProperties = {
+    backgroundColor: CREAM,
+    borderRadius: 24,
+    padding: "16px 16px 18px 16px",
+    width: "100%",
+    maxWidth: 360,
+    boxShadow: "0 10px 30px rgba(15,23,42,0.4)",
+    textAlign: "center",
+    position: "relative",
+  };
+
+  const modalCloseBtnStyle: React.CSSProperties = {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    border: "none",
+    borderRadius: "999px",
+    width: 30,
+    height: 30,
+    cursor: "pointer",
+    backgroundColor: "#e5e7eb",
+    color: "#111827",
+    fontWeight: 700,
   };
 
   return (
     <div style={screenStyle}>
       <div style={phoneStyle}>
-        {/* HEADER */}
+        {/* HEADER (same as 4-7-8) */}
         <div style={topSectionStyle}>
           <button
             type="button"
@@ -334,14 +381,13 @@ const DiaphragmaticBreathingPage: React.FC = () => {
             ⬅
           </button>
 
-          <div style={titleBlockStyle}>
-            <div style={smallLabelStyle}>
-              <span style={tinyLogoStyle}>
-                <img src={logo} alt="Mendly logo" style={tinyLogoImgStyle} />
-              </span>
-              Mendly App
+          <div style={logoBlockStyle}>
+            <div style={logoCircleStyle}>
+              <img src={logo} alt="Mendly logo" style={logoImgStyle} />
             </div>
-            <span style={headerTitleStyle}>Diaphragmatic Breathing</span>
+            <div style={appNameStyle}>
+              <strong>Mendly App</strong>
+            </div>
           </div>
 
           <button
@@ -363,9 +409,21 @@ const DiaphragmaticBreathingPage: React.FC = () => {
         <div
           style={contentStyle}
           ref={contentRef}
-          onScroll={handleContentScroll}
+          onScroll={(e) => setShowScrollTop(e.currentTarget.scrollTop > 60)}
         >
-          {/* jump-to-practice arrow */}
+          {/* Hero title + belly image */}
+          <div>
+            <div style={heroTitleStyle}>Diaphragmatic Breathing</div>
+            <div style={heroImageWrapperStyle}>
+              <img
+                src={bellyImg}
+                alt="Illustration of belly breathing"
+                style={heroImageStyle}
+              />
+            </div>
+          </div>
+
+          {/* Scroll arrow to practice section */}
           <div style={scrollArrowWrapperStyle}>
             <button
               type="button"
@@ -378,33 +436,32 @@ const DiaphragmaticBreathingPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Section: What it is */}
+          <div style={dividerStyle}>••••••••••••••••••••••••</div>
+
+          {/* Sections – copied text but styled like 4-7-8 page */}
           <div>
-            <div style={sectionTitleStyle}>
-              Diaphragmatic (Belly) Breathing
-            </div>
+            <div style={sectionTitleStyle}>What is diaphragmatic breathing?</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0 }}>
-              Diaphragmatic breathing helps you shift from shallow chest
-              breathing to deep abdominal breathing, improving oxygen flow and
-              reducing muscle tension. It’s widely used in therapies like CBT
-              to support stress regulation, emotional balance, and focus.
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4 }}>
+              Diaphragmatic breathing helps you shift from shallow chest breathing
+              to deep abdominal breathing, improving oxygen flow and reducing
+              muscle tension. It’s widely used in therapies like CBT to support
+              stress regulation, emotional balance, and focus.
             </p>
             <p>
               Instead of lifting your shoulders and breathing high in the chest,
-              this technique teaches your body to breathe using the diaphragm —
-              a strong muscle under your lungs — so each breath is slower,
-              deeper, and more efficient.
+              this technique teaches your body to breathe using the diaphragm—a
+              strong muscle under your lungs—so each breath is slower, deeper, and
+              more efficient.
             </p>
           </div>
 
-          {/* Section: How to do it */}
           <div>
             <div style={sectionTitleStyle}>How to do it</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0, fontWeight: 600 }}>
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4, fontWeight: 600 }}>
               Follow these steps slowly:
             </p>
             <ul style={tipsListStyle}>
@@ -426,14 +483,12 @@ const DiaphragmaticBreathingPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Section: Tips & CBT-style use */}
           <div>
             <div style={sectionTitleStyle}>Tips for better practice</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0 }}>
-              Small details can make diaphragmatic breathing much more
-              effective:
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4 }}>
+              Small details can make diaphragmatic breathing much more effective:
             </p>
             <ul style={tipsListStyle}>
               <li>
@@ -441,8 +496,8 @@ const DiaphragmaticBreathingPage: React.FC = () => {
                 your chest.
               </li>
               <li>
-                Relax your shoulders and jaw — tension here can keep breathing
-                stuck in the chest.
+                Relax your shoulders and jaw—tension here can keep breathing stuck
+                in the chest.
               </li>
               <li>
                 Use calm background sounds or soft music if it helps you stay
@@ -453,35 +508,34 @@ const DiaphragmaticBreathingPage: React.FC = () => {
                 one long session.
               </li>
               <li>
-                Pair it with a thought like:{" "}
+                Pair it with a thought like{" "}
                 <em>&quot;I’m safe right now; I’m just breathing.&quot;</em> to
                 support CBT-style calming.
               </li>
             </ul>
           </div>
 
-          {/* Section: When to use it */}
           <div>
             <div style={sectionTitleStyle}>When can it help?</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0 }}>
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4 }}>
               You can use belly breathing whenever you want to gently calm your
               system:
             </p>
             <ul style={tipsListStyle}>
               <li>Before an exam, game, or stressful conversation.</li>
-              <li>When you notice racing thoughts or tight chest/shoulders.</li>
+              <li>When you notice racing thoughts or a tight chest/shoulders.</li>
               <li>As a mini-reset between study blocks or training sessions.</li>
               <li>As part of your night routine to wind down before sleep.</li>
             </ul>
             <p>
-              The more often you practice when you’re already calm, the easier
-              it becomes to use it when you’re stressed.
+              The more often you practice when you’re already calm, the easier it
+              becomes to use it when you’re stressed.
             </p>
           </div>
 
-          {/* YouTube video */}
+          {/* Video card – same style as 4-7-8 page, but with this video */}
           <div style={videoCardStyle}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>
               Watch a guided diaphragmatic breathing video
@@ -502,13 +556,15 @@ const DiaphragmaticBreathingPage: React.FC = () => {
             </a>
           </div>
 
-          {/* Practice section */}
+          <div style={dividerStyle}>••••••••••••••••••••••••</div>
+
+          {/* Practice section (scroll arrow goes here) */}
           <div ref={practiceRef}>
-            <div style={practiceCardStyle}>
+            <div style={practiceSectionStyle}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>
                 Try it now (1–2 minutes)
               </div>
-              <div style={{ fontSize: 13, color: "#4b5563" }}>
+              <div style={{ fontSize: 13, color: "#e5e7eb" }}>
                 Sit comfortably, place one hand on your chest and one on your
                 belly. Try 8–10 slow breaths:
               </div>
@@ -522,7 +578,6 @@ const DiaphragmaticBreathingPage: React.FC = () => {
                 type="button"
                 style={practiceButtonStyle}
                 onClick={handleScrollTop}
-                ref={practiceButtonRef}
               >
                 Finished a round? Back to top ↑
               </button>
@@ -543,7 +598,7 @@ const DiaphragmaticBreathingPage: React.FC = () => {
           </button>
         )}
 
-        {/* BOTTOM NAV */}
+        {/* BOTTOM NAV (same as other pages) */}
         <div style={bottomNavStyle}>
           <button
             type="button"
@@ -575,6 +630,38 @@ const DiaphragmaticBreathingPage: React.FC = () => {
             <div>Ai Chat</div>
           </button>
         </div>
+
+        {/* VIDEO MODAL */}
+        {showVideoModal && (
+          <div style={modalOverlayStyle}>
+            <div style={modalCardStyle}>
+              <button
+                type="button"
+                style={modalCloseBtnStyle}
+                onClick={() => setShowVideoModal(false)}
+                aria-label="Close"
+                title="Close"
+              >
+                ✕
+              </button>
+              <h3 style={{ margin: 0, marginBottom: 4, fontSize: 16 }}>
+                Diaphragmatic Breathing – Guided video
+              </h3>
+              <p style={{ marginTop: 0, fontSize: 12, color: "#4b5563" }}>
+                Watch and follow along with this short guided practice.
+              </p>
+              <div style={videoFrameWrapperStyle}>
+                <iframe
+                  src="https://www.youtube.com/embed/9jpchJcKivk"
+                  title="Diaphragmatic (Belly) Breathing – Guided practice"
+                  style={videoIframeStyle}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

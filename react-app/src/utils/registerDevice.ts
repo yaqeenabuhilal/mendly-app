@@ -1,9 +1,12 @@
 // react-app/src/utils/registerDevice.ts
 import { getFcmToken } from "./fcm";
 
-const API_BASE =
-  (import.meta.env.VITE_API_URL as string | undefined) ??
-  "http://localhost:8000";
+const isNative = (window as any).Capacitor?.isNativePlatform?.() ?? false;
+  const API_BASE =
+    isNative
+      ? "http://10.0.2.2:8000"                   // emulator → host machine
+      : (import.meta.env.VITE_API_URL as string | undefined) ??
+        "http://localhost:8000";
 
 /**
  * Very simple platform detection so we can send "ios" or "android"

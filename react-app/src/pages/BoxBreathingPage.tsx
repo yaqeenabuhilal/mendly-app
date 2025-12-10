@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
+import boxImg from "../assets/box.png";
 
 type PhaseKey = "inhale" | "hold1" | "exhale" | "hold2";
 
@@ -18,7 +19,6 @@ const PHASES: Phase[] = [
   { key: "hold2", label: "Hold (4 seconds)", seconds: 4 },
 ];
 
-// recommended 4–6 cycles → we’ll default to 6
 const TOTAL_CYCLES = 6;
 
 const BoxBreathingPage: React.FC = () => {
@@ -28,21 +28,19 @@ const BoxBreathingPage: React.FC = () => {
   const CREAM = "#f5e9d9";
   const PURPLE = "#5B5FEF";
 
-  // ===== TIMER STATE =====
-  const [running, setRunning] = useState<boolean>(false);
-  const [phaseIndex, setPhaseIndex] = useState<number>(0);
-  const [secondsLeft, setSecondsLeft] = useState<number>(PHASES[0].seconds);
-  const [cyclesLeft, setCyclesLeft] = useState<number>(TOTAL_CYCLES);
+  const [running, setRunning] = useState(false);
+  const [phaseIndex, setPhaseIndex] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useState(PHASES[0].seconds);
+  const [cyclesLeft, setCyclesLeft] = useState(TOTAL_CYCLES);
 
-  const [showTimerModal, setShowTimerModal] = useState<boolean>(false);
+  const [showTimerModal, setShowTimerModal] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
 
   const currentPhase = PHASES[phaseIndex];
   const currentCycle =
     cyclesLeft <= 0 ? TOTAL_CYCLES : TOTAL_CYCLES - cyclesLeft + 1;
 
   const timerRef = useRef<HTMLDivElement | null>(null);
-
-  // scroll container + upper arrow
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -55,9 +53,7 @@ const BoxBreathingPage: React.FC = () => {
     }
 
     if (secondsLeft <= 0) {
-      // move to next phase or next cycle
       if (phaseIndex === PHASES.length - 1) {
-        // end of "hold2" → end of square
         if (cyclesLeft === 1) {
           setRunning(false);
           setCyclesLeft(0);
@@ -76,11 +72,11 @@ const BoxBreathingPage: React.FC = () => {
       }
     }
 
-    const timerId = window.setTimeout(() => {
+    const id = window.setTimeout(() => {
       setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
 
-    return () => window.clearTimeout(timerId);
+    return () => window.clearTimeout(id);
   }, [running, secondsLeft, phaseIndex, cyclesLeft]);
 
   const handleToggleRunning = () => {
@@ -107,15 +103,12 @@ const BoxBreathingPage: React.FC = () => {
     timerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  // open video in modal (YouTube)
   const handleVideoClick = (
     e: React.MouseEvent<HTMLAnchorElement, MouseEvent>
   ) => {
     e.preventDefault();
-    window.open(
-      "https://cdn.jwplayer.com/previews/8uIZay18",
-      "_blank",
-      "noopener,noreferrer"
-    );
+    setShowVideoModal(true);
   };
 
   const primaryTimerButtonLabel = running
@@ -129,11 +122,12 @@ const BoxBreathingPage: React.FC = () => {
   };
 
   const handleContentScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const scrolled = e.currentTarget.scrollTop;
-    setShowScrollTop(scrolled > 60);
+    setShowScrollTop(e.currentTarget.scrollTop > 60);
   };
 
-  // ===== STYLES =====
+  // ===== STYLES (same vibe as 4-7-8 page) =====
+  const BLUE_BG = BLUE;
+
   const screenStyle: React.CSSProperties = {
     height: "100vh",
     width: "100vw",
@@ -142,7 +136,7 @@ const BoxBreathingPage: React.FC = () => {
     display: "flex",
     justifyContent: "center",
     alignItems: "stretch",
-    backgroundColor: BLUE,
+    backgroundColor: BLUE_BG,
     fontFamily:
       '"Poppins", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   };
@@ -152,7 +146,7 @@ const BoxBreathingPage: React.FC = () => {
     height: "100%",
     maxWidth: 450,
     margin: "0 auto",
-    backgroundColor: BLUE,
+    backgroundColor: BLUE_BG,
     borderRadius: 0,
     overflow: "hidden",
     display: "flex",
@@ -163,114 +157,129 @@ const BoxBreathingPage: React.FC = () => {
 
   const topSectionStyle: React.CSSProperties = {
     backgroundColor: CREAM,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 6,
+    paddingBottom: 6,
     paddingInline: 16,
     display: "flex",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
-    height: 50,
   };
 
   const iconBtn: React.CSSProperties = {
     position: "absolute",
-    top: 14,
-    width: 42,
-    height: 42,
+    top: 8,
+    width: 35,
+    height: 35,
     borderRadius: 999,
     border: "none",
     cursor: "pointer",
-    backgroundColor: "#3970aaff",
+    backgroundColor: "#3970aa",
     color: CREAM,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 20,
+    fontSize: 16,
     boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
   };
 
-  const homeBtnStyle: React.CSSProperties = { ...iconBtn, left: 12 };
-  const logoutBtnStyle: React.CSSProperties = { ...iconBtn, right: 12 };
+  const homeBtnStyle: React.CSSProperties = { ...iconBtn, left: 16 };
+  const logoutBtnStyle: React.CSSProperties = { ...iconBtn, right: 16 };
 
-  const titleBlockStyle: React.CSSProperties = {
+  const logoBlockStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    gap: 2,
     alignItems: "center",
+    gap: 4,
   };
 
-  const smallLabelStyle: React.CSSProperties = {
-    color: "#5F8DD0",
-    fontSize: 14,
-    fontWeight: 600,
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-  };
-
-  const tinyLogoStyle: React.CSSProperties = {
-    width: 28,
-    height: 28,
+  const logoCircleStyle: React.CSSProperties = {
+    width: 40,
+    height: 40,
     borderRadius: "50%",
     overflow: "hidden",
     backgroundColor: CREAM,
-    display: "inline-flex",
+    display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
   };
 
-  const tinyLogoImgStyle: React.CSSProperties = {
+  const logoImgStyle: React.CSSProperties = {
     width: "130%",
     height: "130%",
     objectFit: "cover",
   };
 
-  const headerTitleStyle: React.CSSProperties = {
-    fontFamily: '"Times New Roman", Georgia, serif',
-    fontSize: 22,
+  const appNameStyle: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
     color: "#5F8DD0",
+    letterSpacing: 0.5,
   };
 
   const contentStyle: React.CSSProperties = {
     flex: 1,
-    backgroundColor: BLUE,
-    padding: "10px 20px 16px 20px",
+    backgroundColor: BLUE_BG,
+    padding: "18px 24px 16px 24px",
     display: "flex",
     flexDirection: "column",
-    gap: 14,
-    color: "#111827",
+    gap: 16,
+    color: "#f9fafb",
     overflowY: "auto",
   };
 
-  // Scroll arrow to timer
+  const heroTitleStyle: React.CSSProperties = {
+    fontSize: 28,
+    fontWeight: 700,
+    textAlign: "center",
+    marginBottom: 6,
+  };
+
+  const heroImageWrapperStyle: React.CSSProperties = {
+        marginTop: 4,
+        marginBottom: 10,
+        display: "flex",
+        justifyContent: "center",
+        backgroundColor: BLUE,      // same as page
+        borderRadius: 0,
+        overflow: "hidden",
+      };
+    
+      const heroImageStyle: React.CSSProperties = {
+        width: "100%",
+        height: 150,
+        maxWidth: 580,
+        display: "block",
+        mixBlendMode: "multiply",   // white turns into background color
+      };
+
+  const dividerStyle: React.CSSProperties = {
+    textAlign: "center",
+    letterSpacing: 4,
+    margin: "12px 0 4px 0",
+  };
+
   const scrollArrowWrapperStyle: React.CSSProperties = {
-    top: 0,
-    zIndex: 10,
     display: "flex",
     justifyContent: "center",
-    paddingTop: 4,
-    paddingBottom: 4,
-    backgroundColor: BLUE,
+    marginTop: 4,
+    marginBottom: 4,
   };
 
   const scrollArrowButtonStyle: React.CSSProperties = {
-    width: "100%",
-    height: 30,
-    borderRadius: "40%",
+    borderRadius: 999,
     border: "none",
     backgroundColor: "#F4C58F",
     color: "#3565AF",
     cursor: "pointer",
+    padding: "6px 14px",
     boxShadow: "0 4px 12px rgba(15,23,42,0.35)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 18,
+    fontSize: 14,
+    fontWeight: 600,
   };
 
-  // scroll-to-top button (upper arrow)
   const scrollTopBtnStyle: React.CSSProperties = {
     position: "absolute",
     right: 20,
@@ -279,7 +288,7 @@ const BoxBreathingPage: React.FC = () => {
     height: 40,
     borderRadius: 999,
     border: "none",
-    backgroundColor: "#3970aaff",
+    backgroundColor: "#3970aa",
     color: CREAM,
     cursor: "pointer",
     boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
@@ -292,19 +301,15 @@ const BoxBreathingPage: React.FC = () => {
 
   const sectionTitleStyle: React.CSSProperties = {
     marginTop: 8,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 700,
-    color: "#f9fafb",
+    color: "#ffffff",
   };
 
-  const textCardStyle: React.CSSProperties = {
-    backgroundColor: CREAM,
-    borderRadius: 20,
-    padding: "14px 14px 16px 14px",
-    boxShadow: "0 8px 20px rgba(15,23,42,0.18)",
+  const textBlockStyle: React.CSSProperties = {
     fontSize: 14,
-    lineHeight: 1.5,
-    color: "#111827",
+    lineHeight: 1.6,
+    color: "#f9fafb",
   };
 
   const tipsListStyle: React.CSSProperties = {
@@ -314,13 +319,12 @@ const BoxBreathingPage: React.FC = () => {
   };
 
   const videoCardStyle: React.CSSProperties = {
-    ...textCardStyle,
-    padding: "12px 12px 14px 12px",
+    ...textBlockStyle,
   };
 
   const videoThumbStyle: React.CSSProperties = {
     marginTop: 8,
-    borderRadius: 16,
+    borderRadius: 24,
     overflow: "hidden",
     background:
       "linear-gradient(135deg, #111827, #1f2937 40%, #2563eb 70%, #60a5fa)",
@@ -354,25 +358,26 @@ const BoxBreathingPage: React.FC = () => {
     textShadow: "0 2px 6px rgba(0,0,0,0.6)",
   };
 
-  const startSectionCardStyle: React.CSSProperties = {
-    ...textCardStyle,
+  const startSectionStyle: React.CSSProperties = {
     textAlign: "center",
+    marginTop: 10,
   };
 
   const startBreathingButtonStyle: React.CSSProperties = {
-    marginTop: 10,
-    width: "100%",
+    marginTop: 14,
+    width: "80%",
+    maxWidth: 260,
     borderRadius: 999,
     border: "none",
-    padding: "10px 14px",
-    backgroundColor: PURPLE,
-    color: "#f9fafb",
-    fontSize: 15,
-    fontWeight: 600,
+    padding: "12px 18px",
+    backgroundColor: CREAM,
+    color: BLUE_BG,
+    fontSize: 18,
+    fontWeight: 700,
     cursor: "pointer",
+    boxShadow: "0 10px 25px rgba(15,23,42,0.35)",
   };
 
-  // Modal styles
   const modalOverlayStyle: React.CSSProperties = {
     position: "absolute",
     inset: 0,
@@ -471,6 +476,20 @@ const BoxBreathingPage: React.FC = () => {
     color: "#374151",
   };
 
+  const videoFrameWrapperStyle: React.CSSProperties = {
+    width: "100%",
+    aspectRatio: "16 / 9",
+    borderRadius: 16,
+    overflow: "hidden",
+    marginTop: 8,
+  };
+
+  const videoIframeStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    border: "none",
+  };
+
   const bottomNavStyle: React.CSSProperties = {
     width: "100%",
     backgroundColor: CREAM,
@@ -512,14 +531,13 @@ const BoxBreathingPage: React.FC = () => {
             ⬅
           </button>
 
-          <div style={titleBlockStyle}>
-            <div style={smallLabelStyle}>
-              <span style={tinyLogoStyle}>
-                <img src={logo} alt="Mendly logo" style={tinyLogoImgStyle} />
-              </span>
-              Mendly App
+          <div style={logoBlockStyle}>
+            <div style={logoCircleStyle}>
+              <img src={logo} alt="Mendly logo" style={logoImgStyle} />
             </div>
-            <span style={headerTitleStyle}>Box Breathing</span>
+            <div style={appNameStyle}>
+              <strong>Mendly App</strong>
+            </div>
           </div>
 
           <button
@@ -543,6 +561,18 @@ const BoxBreathingPage: React.FC = () => {
           ref={contentRef}
           onScroll={handleContentScroll}
         >
+          {/* Title + illustration */}
+          <div>
+            <div style={heroTitleStyle}>Box Breathing</div>
+            <div style={heroImageWrapperStyle}>
+              <img
+                src={boxImg}
+                alt="Illustration of box breathing"
+                style={heroImageStyle}
+              />
+            </div>
+          </div>
+
           {/* Scroll to counter button */}
           <div style={scrollArrowWrapperStyle}>
             <button
@@ -556,12 +586,14 @@ const BoxBreathingPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Purpose & Benefits */}
+          <div style={dividerStyle}>••••••••••••••••••••••••</div>
+
+          {/* Purpose & benefits */}
           <div>
             <div style={sectionTitleStyle}>Purpose &amp; benefits</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0 }}>
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4 }}>
               Box breathing is ideal for focus and emotional control. It’s used
               by athletes, performers, and even in some military training
               programs to regulate oxygen and create a calm-but-alert state in
@@ -578,8 +610,8 @@ const BoxBreathingPage: React.FC = () => {
           <div>
             <div style={sectionTitleStyle}>How to do it</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0, fontWeight: 600 }}>
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4, fontWeight: 600 }}>
               Use the simple 4–4–4–4 rhythm:
             </p>
             <ul style={tipsListStyle}>
@@ -599,7 +631,7 @@ const BoxBreathingPage: React.FC = () => {
           <div>
             <div style={sectionTitleStyle}>Tips for box breathing</div>
           </div>
-          <div style={textCardStyle}>
+          <div style={textBlockStyle}>
             <p style={{ marginTop: 0 }}>
               These details make the exercise more effective:
             </p>
@@ -619,11 +651,11 @@ const BoxBreathingPage: React.FC = () => {
             </ul>
           </div>
 
-          {/* When to use it */}
+          {/* When can it help? */}
           <div>
             <div style={sectionTitleStyle}>When can it help?</div>
           </div>
-          <div style={textCardStyle}>
+          <div style={textBlockStyle}>
             <p style={{ marginTop: 0 }}>
               Box breathing is especially useful when you feel mentally busy but
               still need to perform:
@@ -641,13 +673,13 @@ const BoxBreathingPage: React.FC = () => {
             </ul>
           </div>
 
-          {/* Video */}
+          {/* Video (YouTube) */}
           <div style={videoCardStyle}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>
               Watch a guided box breathing video
             </div>
             <a
-              href="https://cdn.jwplayer.com/previews/8uIZay18"
+              href="https://www.youtube.com/watch?v=tEmt1Znux58"
               target="_blank"
               rel="noopener noreferrer"
               style={{ textDecoration: "none" }}
@@ -663,27 +695,19 @@ const BoxBreathingPage: React.FC = () => {
           </div>
 
           {/* Practice / counter section */}
-          <div ref={timerRef}>
-            <div style={startSectionCardStyle}>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                Ready to practice box breathing?
-              </div>
-              <div style={{ fontSize: 13, color: "#4b5563" }}>
-                Tap the button below to open a simple counter that guides you
-                through the 4–4–4–4 box.
-              </div>
-              <button
-                type="button"
-                style={startBreathingButtonStyle}
-                onClick={() => setShowTimerModal(true)}
-              >
-                Start box breathing counter
-              </button>
-            </div>
+          <div ref={timerRef} style={startSectionStyle}>
+            <div style={dividerStyle}>••••••••••••••••••••••••</div>
+            <button
+              type="button"
+              style={startBreathingButtonStyle}
+              onClick={() => setShowTimerModal(true)}
+            >
+              Breath with me
+            </button>
           </div>
         </div>
 
-        {/* UPPER ARROW (scroll to top) */}
+        {/* SCROLL TO TOP BUTTON */}
         {showScrollTop && (
           <button
             type="button"
@@ -786,6 +810,38 @@ const BoxBreathingPage: React.FC = () => {
                 If you feel dizzy or uncomfortable, stop, breathe normally, and
                 try a shorter count (like 3–3–3–3) next time.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* VIDEO MODAL */}
+        {showVideoModal && (
+          <div style={modalOverlayStyle}>
+            <div style={modalCardStyle}>
+              <button
+                type="button"
+                style={modalCloseBtnStyle}
+                onClick={() => setShowVideoModal(false)}
+                aria-label="Close"
+                title="Close"
+              >
+                ✕
+              </button>
+              <h3 style={{ margin: 0, marginBottom: 4, fontSize: 16 }}>
+                Box breathing – Guided video
+              </h3>
+              <p style={{ marginTop: 0, fontSize: 12, color: "#4b5563" }}>
+                Watch and follow along with this short guided practice.
+              </p>
+              <div style={videoFrameWrapperStyle}>
+                <iframe
+                  src="https://www.youtube.com/embed/tEmt1Znux58"
+                  title="Box Breathing – Guided demo"
+                  style={videoIframeStyle}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
             </div>
           </div>
         )}

@@ -1,9 +1,9 @@
 # server/routers/positive_notifications_routes.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-import json   # 🔹 NEW
+import json
 
 from ..deps import get_db
 from .auth_routes import _user_id_from_authorization
@@ -16,7 +16,10 @@ router = APIRouter(
 # ---------- Schemas ----------
 
 class PositiveNotificationSettings(BaseModel):
-    enabled: bool = Field(..., description="Whether positive notifications are on or off")
+    enabled: bool = Field(
+        ...,
+        description="Whether positive notifications are on or off",
+    )
     frequency_minutes: int = Field(
         ...,
         ge=1,
@@ -24,8 +27,9 @@ class PositiveNotificationSettings(BaseModel):
         description="Interval between notifications in minutes",
     )
 
-# 🔹 NEW: optional custom body for test push
+
 class TestPositiveNotification(BaseModel):
+    # optional custom body for test push
     body: str | None = None
 
 
@@ -39,8 +43,16 @@ def _row_to_settings(row) -> PositiveNotificationSettings:
         # No row in UserSettings yet for this user -> defaults
         return PositiveNotificationSettings(enabled=True, frequency_minutes=60)
 
-    enabled = bool(row.positive_notif_enabled) if row.positive_notif_enabled is not None else True
-    freq = int(row.positive_notif_interval_minutes) if row.positive_notif_interval_minutes is not None else 60
+    enabled = (
+        bool(row.positive_notif_enabled)
+        if row.positive_notif_enabled is not None
+        else True
+    )
+    freq = (
+        int(row.positive_notif_interval_minutes)
+        if row.positive_notif_interval_minutes is not None
+        else 60
+    )
 
     return PositiveNotificationSettings(enabled=enabled, frequency_minutes=freq)
 
@@ -103,7 +115,6 @@ def update_positive_notifications_settings(
 
     # If no row was updated, insert a new one with basic defaults
     if result.rowcount == 0:
-        # NOTE: adjust column names if your table uses different ones.
         db.execute(
             text(
                 """
@@ -130,7 +141,8 @@ def update_positive_notifications_settings(
     return payload
 
 
-# 🔹 NEW: enqueue one test positive notification into NotificationQueue
+# ---------- Test notification ----------
+
 @router.post("/send-test", status_code=204)
 def send_test_positive_notification(
     payload: TestPositiveNotification,
@@ -138,11 +150,35 @@ def send_test_positive_notification(
     db: Session = Depends(get_db),
 ):
     """
-    Enqueue a single 'tip' job for this user so the notification_worker
-    sends it via FCM – behaves like a real push notification.
-    """
-    message_body = payload.body or "This is a test positive notification from Mendly 🌱"
+    Enqueue a single test positive notification for this user.
 
+    IMPORTANT:
+    We use purpose='checkin_reminder' because the existing
+    notification_worker already knows how to process that purpose.
+    """
+    # 1) Optional custom message body
+    message_body = (
+        payload.body
+        or "This is a test positive notification from Mendly 🌱"
+    )
+
+    # 2) Pick latest active device token from UserDeviceTokens
+    #    (your columns: token_id, user_id, platform, fcm_token, last_seen, is_active)
+    token_row = db.execute(
+        text(
+            """
+            SELECT TOP 1 token_id
+            FROM dbo.UserDeviceTokens
+            WHERE user_id = :uid AND is_active = 1
+            ORDER BY last_seen DESC
+            """
+        ),
+        {"uid": user_id},
+    ).fetchone()
+
+    token_id = token_row.token_id if token_row is not None else None
+
+    # 3) Build payload json – worker will send title/body from this
     payload_json = json.dumps(
         {
             "title": "Mendly • Test positive message",
@@ -151,17 +187,24 @@ def send_test_positive_notification(
         }
     )
 
+    # 4) Insert into NotificationQueue with purpose that worker already handles
     db.execute(
         text(
             """
             INSERT INTO dbo.NotificationQueue
                 (user_id, token_id, purpose, payload_json, scheduled_at, status)
             VALUES
-                (:uid, NULL, N'tip', :payload_json, SYSDATETIMEOFFSET(), N'pending')
+                (:uid, :token_id, N'checkin_reminder', :payload_json,
+                 SYSDATETIMEOFFSET(), N'pending')
             """
         ),
-        {"uid": user_id, "payload_json": payload_json},
+        {
+            "uid": user_id,
+            "token_id": token_id,          # can be NULL – same as older rows
+            "payload_json": payload_json,
+        },
     )
+
     db.commit()
     # 204 No Content
     return

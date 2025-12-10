@@ -1,7 +1,14 @@
 // react-app/src/api/auth.ts
 import axios from "axios";
 
-const API_BASE = "http://localhost:8000";
+import { Capacitor } from "@capacitor/core";
+
+const isNative = Capacitor.isNativePlatform?.() ?? false;
+
+export const API_BASE = isNative
+  ? "http://10.0.2.2:8000"               // Android / iOS app
+  : (import.meta.env.VITE_API_URL ?? "http://localhost:8000");  // browser
+
 
 // ============== SIGNUP ==============
 
@@ -209,6 +216,7 @@ export async function submitMoodCheckin(payload: {
 }
 
 export interface SeriesPoint {
+  value: number;
   date: string;
   avg_score: number | null;
 }
@@ -258,5 +266,101 @@ export async function updatePositiveNotificationSettings(
     throw new Error(text || `Failed to update positive notifications: ${res.status}`);
   }
 
+  return res.json();
+}
+
+
+export interface HappyMemory {
+  memory_id: string;
+  image_url: string;
+  caption: string | null;
+  memory_date: string | null;
+  created_at: string;
+}
+
+export async function listHappyMemories(): Promise<HappyMemory[]> {
+  const token = window.localStorage.getItem("access_token");
+  if (!token) throw new Error("Not logged in");
+
+  const res = await fetch(`${API_BASE}/photo-memories`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to load happy memories");
+  }
+
+  return res.json();
+}
+
+export async function uploadHappyMemory(
+  file: File,
+  caption?: string,
+  memoryDate?: string
+): Promise<void> {
+  const token = window.localStorage.getItem("access_token");
+  if (!token) throw new Error("Not logged in");
+
+  const formData = new FormData();
+  formData.append("file", file);
+  if (caption) formData.append("caption", caption);
+  if (memoryDate) formData.append("memory_date", memoryDate);
+
+  const res = await fetch(`${API_BASE}/photo-memories/upload`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to upload happy memory");
+  }
+}
+
+export async function deleteHappyMemory(memoryId: string): Promise<void> {
+  const token = window.localStorage.getItem("access_token");
+  if (!token) throw new Error("Not logged in");
+
+  const res = await fetch(`${API_BASE}/photo-memories/${memoryId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to delete happy memory");
+  }
+}
+
+export interface WeeklyPhotoCandidate {
+  show: boolean;
+  memory?: {
+    memory_id: string;
+    image_url: string;
+    caption: string | null;
+    memory_date: string | null;
+  };
+  message?: string;
+}
+
+export async function getWeeklyPhotoCandidate(): Promise<WeeklyPhotoCandidate> {
+  const token = window.localStorage.getItem("access_token");
+  if (!token) throw new Error("Not logged in");
+
+  const res = await fetch(`${API_BASE}/photo-memories/weekly-candidate`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to load weekly photo candidate");
+  }
   return res.json();
 }

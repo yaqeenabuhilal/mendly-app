@@ -1,17 +1,21 @@
 // react-app/src/pages/PositiveNotificationsPage.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
-import happyMindImg from "../assets/happy-mind.jpg";
 import {
   getPositiveNotificationSettings,
   updatePositiveNotificationSettings,
+  getMoodSeries,
+  type SeriesPoint,
 } from "../api/auth";
 
 // 🔹 API base for calling backend directly
-const API_BASE =
-  (import.meta.env.VITE_API_URL as string | undefined) ??
-  "http://localhost:8000";
+const isNative = (window as any).Capacitor?.isNativePlatform?.() ?? false;
+  const API_BASE =
+    isNative
+      ? "http://10.0.2.2:8000"                   // emulator → host machine
+      : (import.meta.env.VITE_API_URL as string | undefined) ??
+        "http://localhost:8000";
 
 // 🔹 Test messages for the "Send test" button
 const TEST_POSITIVE_MESSAGES: string[] = [
@@ -42,14 +46,68 @@ const PositiveNotificationsPage: React.FC = () => {
   const CREAM = "#f5e9d9";
   const GREEN = "#10B981";
 
-  // ===== STATE =====
+  // ===== STATE (notifications) =====
   const [enabled, setEnabled] = useState<boolean>(true);
   const [frequency, setFrequency] = useState<string>("60");
   const [loadingSettings, setLoadingSettings] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
-  // 🔁 Load settings from backend when page mounts
+  // ===== STATE (weekly motivation / mood) =====
+  const [moodLoading, setMoodLoading] = useState<boolean>(true);
+  const [moodError, setMoodError] = useState<string | null>(null);
+  const [series7, setSeries7] = useState<SeriesPoint[] | null>(null);
+
+  // ---------- helpers copied from WeeklyMotivationPage ----------
+  function isoDateUTC(d: Date): string {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function prettyDayUTC(iso: string) {
+    return new Date(iso + "T00:00:00Z").toLocaleDateString(undefined, {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+    });
+  }
+
+  function sortAsc(arr: SeriesPoint[]) {
+    return [...arr].sort((a, b) =>
+      a.date < b.date ? -1 : a.date > b.date ? 1 : 0
+    );
+  }
+
+  function normalizeToEndingToday(
+    source: SeriesPoint[] | null,
+    length: number
+  ): SeriesPoint[] {
+    const map = new Map<string, number | null>();
+    (source || []).forEach((p) => {
+      const key = (p.date || "").slice(0, 10);
+      map.set(key, p.avg_score ?? null);
+    });
+
+    const out: SeriesPoint[] = [];
+    const end = new Date();
+    for (let i = length - 1; i >= 0; i--) {
+      const d = new Date(
+        Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
+      );
+      d.setUTCDate(d.getUTCDate() - i);
+      const iso = isoDateUTC(d);
+      out.push({
+        date: iso,
+        avg_score: map.has(iso) ? (map.get(iso) as number | null) : null,
+        value: 0,
+      });
+    }
+    return out;
+  }
+
+  // 🔁 Load notification settings on mount
   useEffect(() => {
     let isMounted = true;
 
@@ -77,10 +135,121 @@ const PositiveNotificationsPage: React.FC = () => {
     };
   }, []);
 
-  // we keep this empty – backend-driven push now
+  // 🔁 Load mood data for last 7 days (for motivation notes)
   useEffect(() => {
-    if (loadingSettings) return;
-  }, [enabled, frequency, loadingSettings]);
+    (async () => {
+      try {
+        setMoodLoading(true);
+        setMoodError(null);
+        const raw7 = await getMoodSeries(7);
+        const normalized = normalizeToEndingToday(sortAsc(raw7), 7);
+        setSeries7(normalized);
+      } catch (e: any) {
+        console.error("Failed to load mood series:", e);
+        setMoodError("Could not load your mood summary right now.");
+        setSeries7(null);
+      } finally {
+        setMoodLoading(false);
+      }
+    })();
+  }, []);
+
+  // ---------- compute avg + hasData (same logic as WeeklyMotivationPage) ----------
+  const { avg7, hasData } = useMemo(() => {
+    if (!series7 || !series7.length) {
+      return { avg7: null as number | null, hasData: false };
+    }
+    const vals = series7
+      .map((p) => p.avg_score)
+      .filter((x): x is number => typeof x === "number");
+    if (!vals.length) return { avg7: null, hasData: false };
+    const sum = vals.reduce((a, b) => a + b, 0);
+    return { avg7: Number((sum / vals.length).toFixed(1)), hasData: true };
+  }, [series7]);
+
+  const periodLabel =
+    series7 && series7.length
+      ? `${prettyDayUTC(series7[0].date)} — ${prettyDayUTC(
+          series7[series7.length - 1].date
+        )}`
+      : null;
+
+  const hasTodayData = useMemo(() => {
+    if (!series7 || !series7.length) return false;
+    const last = series7[series7.length - 1];
+    return last.avg_score != null;
+  }, [series7]);
+
+  // ---------- motivation text (same logic as WeeklyMotivationPage) ----------
+  const buildNotes = () => {
+    if (!hasData) {
+      return {
+        title: "Based on your last week",
+        bullets: [
+          "You haven’t logged many moods in the last week. That’s totally okay.",
+          "Even one small check-in a day can help you notice patterns and take better care of yourself.",
+          "Try a quick check-in today and use it as a tiny promise to yourself.",
+        ],
+        footer:
+          "These notes are personal to your mood tracking. They aren’t a diagnosis — just gentle guidance. If things ever feel very heavy, it’s always okay to ask for professional help.",
+      };
+    }
+
+    if (avg7 === null) {
+      return {
+        title: "Based on your last week",
+        bullets: [
+          "Your mood log has been a bit mixed, which is completely normal.",
+          "Staying curious about how you feel — without judging it — is already a powerful step.",
+          "Keep checking in with yourself; every small moment of awareness adds up over time.",
+        ],
+        footer:
+          "If you ever notice your mood staying low for many days in a row, consider reaching out to someone you trust or to a professional for extra support.",
+      };
+    }
+
+    if (avg7 <= 3) {
+      return {
+        title: "It looks like this week has been heavy",
+        bullets: [
+          "You’ve been carrying a lot emotionally. That says nothing bad about you — it just means you’re human.",
+          "Right now, the goal isn’t to “fix everything” — it’s to make this moment a little more gentle.",
+          "Tiny actions count: a short walk, texting one safe person, a few calm breaths, or even just drinking water.",
+          "You deserve support. If things feel overwhelming, talking to a professional or someone you trust can really help.",
+        ],
+        footer:
+          "These notes are based on a lower-than-usual mood this week. Please be kind to yourself — you’re doing the best you can with what you have.",
+      };
+    }
+
+    if (avg7 <= 6) {
+      return {
+        title: "You’re moving through a mixed week",
+        bullets: [
+          "Your week seems to have had ups and downs — which is completely normal.",
+          "Notice what helped on the better days: people, habits, music, sleep, or small routines.",
+          "You can gently add a bit more of what helped, and a bit less of what drained you.",
+          "You don’t have to be “positive” all the time — being honest with yourself is already progress.",
+        ],
+        footer:
+          "These notes are based on an in-between mood week. Keep listening to yourself, and remember that slow, steady care can make a real difference over time.",
+      };
+    }
+
+    return {
+      title: "You’ve had some brighter days this week",
+      bullets: [
+        "Your recent mood has been on the positive side — that’s wonderful to see.",
+        "Notice what has been supporting you: routines, people, boundaries, or choices that protect your energy.",
+        "You can treat this as “evidence” that you’re capable of creating good days for yourself.",
+        "Even when tougher days return, these last 7 days show that better moments are possible for you.",
+      ],
+      footer:
+        "These notes are based on a higher 7-day mood average. Keep protecting what helps you feel well — your energy, time, boundaries, and rest all matter.",
+    };
+  };
+
+  const notes = buildNotes();
 
   // ===== HANDLERS =====
   const handleUpdateClick = async () => {
@@ -103,7 +272,7 @@ const PositiveNotificationsPage: React.FC = () => {
     }
   };
 
-  // 🔹 NEW: ask backend to enqueue a test positive notification (FCM push)
+  // 🔹 ask backend to enqueue a test positive notification (FCM push)
   const handleSendTestClick = async () => {
     try {
       const token = window.localStorage.getItem("access_token");
@@ -114,17 +283,14 @@ const PositiveNotificationsPage: React.FC = () => {
 
       const body = getRandomPositiveMessage();
 
-      const res = await fetch(
-        `${API_BASE}/positive-notifications/send-test`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ body }),
-        }
-      );
+      const res = await fetch(`${API_BASE}/positive-notifications/send-test`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ body }),
+      });
 
       if (!res.ok) {
         const text = await res.text();
@@ -139,7 +305,7 @@ const PositiveNotificationsPage: React.FC = () => {
     }
   };
 
-  // ===== STYLES (same base as Journey) =====
+  // ===== STYLES (unchanged, plus a few for motivation card) =====
   const screenStyle: React.CSSProperties = {
     height: "100vh",
     width: "100vw",
@@ -200,45 +366,6 @@ const PositiveNotificationsPage: React.FC = () => {
   const homeBtnStyle: React.CSSProperties = { ...iconBtn, left: 12 };
   const logoutBtnStyle: React.CSSProperties = { ...iconBtn, right: 12 };
 
-  const titleBlockStyle: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-    alignItems: "center",
-  };
-
-  const smallLabelStyle: React.CSSProperties = {
-    color: "#5F8DD0",
-    fontSize: 14,
-    fontWeight: 600,
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-  };
-
-  const tinyLogoStyle: React.CSSProperties = {
-    width: 28,
-    height: 28,
-    borderRadius: "50%",
-    overflow: "hidden",
-    backgroundColor: CREAM,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-  };
-
-  const tinyLogoImgStyle: React.CSSProperties = {
-    width: "130%",
-    height: "130%",
-    objectFit: "cover",
-  };
-
-  const headerTitleStyle: React.CSSProperties = {
-    fontFamily: '"Times New Roman", Georgia, serif',
-    fontSize: 24,
-    color: "#5F8DD0",
-  };
-
   const bottomSectionStyle: React.CSSProperties = {
     flex: 1,
     padding: "0 0 16px 0",
@@ -260,6 +387,7 @@ const PositiveNotificationsPage: React.FC = () => {
     flexDirection: "column",
     alignItems: "center",
     marginTop: 3,
+    gap: 16,
   };
 
   const cardStyle: React.CSSProperties = {
@@ -272,14 +400,81 @@ const PositiveNotificationsPage: React.FC = () => {
     boxSizing: "border-box",
   };
 
-  const headerImagePlaceholder: React.CSSProperties = {
+  // 🔹 NEW: motivation notes card styles (adapted from WeeklyMotivationPage)
+  const motivationCardStyle: React.CSSProperties = {
     width: "100%",
-    height: 200,
-    borderRadius: 0,
-    overflow: "hidden",
+    background:
+      "linear-gradient(135deg, rgba(15,23,42,0.16), rgba(91,95,239,0.28))",
+    borderRadius: 20,
+    padding: "14px 16px 16px 16px",
+    color: "#f9fafb",
+    boxShadow: "0 12px 30px rgba(15,23,42,0.45)",
+    border: "1px solid rgba(249,250,251,0.18)",
+    fontSize: 14,
+    lineHeight: 1.6,
+    boxSizing: "border-box",
+    marginTop:10,
+  };
+
+  const motivationHeaderRowStyle: React.CSSProperties = {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 8,
+    marginBottom: 4,
+  };
+
+  const motivationTitleStyle: React.CSSProperties = {
+    fontSize: 17,
+    fontWeight: 700,
+  };
+
+  const motivationChipStyle: React.CSSProperties = {
+    padding: "2px 8px",
+    borderRadius: 999,
+    backgroundColor: "rgba(249,250,251,0.3)",
+    color: "#f9fafb",
+    fontSize: 11,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+  };
+
+  const motivationSubRowStyle: React.CSSProperties = {
+    display: "flex",
+    gap: 6,
+    flexWrap: "wrap",
+    marginBottom: 6,
+    fontSize: 11,
+    color: "#e5e7eb",
+  };
+
+  const motivationErrorStyle: React.CSSProperties = {
+    fontSize: 12,
+    color: "#fee2e2",
+    marginTop: 4,
+  };
+
+  const notesTitleStyle: React.CSSProperties = {
+    fontWeight: 700,
+    marginTop: 6,
+    marginBottom: 6,
+  };
+
+  const bulletListStyle: React.CSSProperties = {
+    listStyleType: "disc",
+    paddingLeft: "1.3rem",
+    margin: 0,
+  };
+
+  const bulletItemStyle: React.CSSProperties = {
+    marginBottom: 6,
+    fontSize: 13,
+  };
+
+  const footerTextStyle: React.CSSProperties = {
+    marginTop: 10,
+    fontSize: 11,
+    color: "#e5e7eb",
   };
 
   const labelStyle: React.CSSProperties = {
@@ -398,6 +593,38 @@ const PositiveNotificationsPage: React.FC = () => {
     textAlign: "center",
   };
 
+  const logoBlockStyle: React.CSSProperties = {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 4,
+    };
+  
+    const logoCircleStyle: React.CSSProperties = {
+      width: 40,
+      height: 40,
+      borderRadius: "50%",
+      overflow: "hidden",
+      backgroundColor: CREAM,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
+    };
+  
+    const logoImgStyle: React.CSSProperties = {
+      width: "130%",
+      height: "130%",
+      objectFit: "cover",
+    };
+  
+    const appNameStyle: React.CSSProperties = {
+      fontSize: 12,
+      fontWeight: 600,
+      color: "#5F8DD0",
+      letterSpacing: 0.5,
+    };
+
   const describeFrequency = (value: string): string => {
     switch (value) {
       case "15":
@@ -446,20 +673,19 @@ const PositiveNotificationsPage: React.FC = () => {
             type="button"
             style={homeBtnStyle}
             onClick={() => navigate("/journey")}
-            aria-label="Home"
-            title="Home"
+            aria-label="Back"
+            title="Back"
           >
             🏠
           </button>
 
-          <div style={titleBlockStyle}>
-            <div style={smallLabelStyle}>
-              <span style={tinyLogoStyle}>
-                <img src={logo} alt="Mendly logo" style={tinyLogoImgStyle} />
-              </span>
-              Mendly App
+          <div style={logoBlockStyle}>
+            <div style={logoCircleStyle}>
+              <img src={logo} alt="Mendly logo" style={logoImgStyle} />
             </div>
-            <span style={headerTitleStyle}>Positive Notifications</span>
+            <div style={appNameStyle}>
+              <strong>Mendly App</strong>
+            </div>
           </div>
 
           <button
@@ -479,20 +705,50 @@ const PositiveNotificationsPage: React.FC = () => {
 
         {/* CONTENT */}
         <div style={bottomSectionStyle}>
-          <div style={headerImagePlaceholder}>
-            <img
-              src={happyMindImg}
-              alt="Keep your mind a happy place"
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-          </div>
-
           <div style={innerContentStyle}>
+            {/* 🔹 Weekly motivation notes (replaces the old image) */}
+            <div style={motivationCardStyle}>
+              <div style={motivationHeaderRowStyle}>
+                <div style={motivationTitleStyle}>Your weekly motivation</div>
+                {hasData && avg7 !== null && (
+                  <div style={motivationChipStyle}>
+                    7-day avg: {avg7} / 10
+                  </div>
+                )}
+              </div>
+
+              <div style={motivationSubRowStyle}>
+                {periodLabel && <span>{periodLabel}</span>}
+                {hasData && hasTodayData && <span>Today logged ✅</span>}
+                {hasData && !hasTodayData && <span>No check-in today yet</span>}
+              </div>
+
+              {moodLoading && (
+                <div style={{ fontSize: 12 }}>Loading your mood data…</div>
+              )}
+
+              {!moodLoading && moodError && (
+                <div style={motivationErrorStyle}>{moodError}</div>
+              )}
+
+              {!moodLoading && !moodError && (
+                <>
+                  <div style={notesTitleStyle}>{notes.title}</div>
+                  <ul style={bulletListStyle}>
+                    {notes.bullets.map((t, i) => (
+                      <li key={i} style={bulletItemStyle}>
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                  <div style={footerTextStyle}>
+                    <strong>{notes.footer}</strong>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 🔹 Existing notification settings card (unchanged, just moved under notes) */}
             <div style={cardStyle}>
               <div>
                 <div style={labelStyle}>
@@ -545,7 +801,7 @@ const PositiveNotificationsPage: React.FC = () => {
                 {saving ? "Updating…" : "Update"}
               </button>
 
-              {/* 🔹 TEST BUTTON → sends FCM push via backend */}
+              {/* TEST BUTTON → sends FCM push via backend */}
               <button
                 type="button"
                 style={testButtonStyle}

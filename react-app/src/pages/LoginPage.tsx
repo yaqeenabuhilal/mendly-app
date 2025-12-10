@@ -16,17 +16,28 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
       const token = await login({ username, password });
       localStorage.setItem("access_token", token.access_token);
-        // NEW: register device for push notifications
-        registerDeviceWithBackend(token.access_token).catch((err) =>
+
+      // NEW: register device for push notifications
+      registerDeviceWithBackend(token.access_token).catch((err) =>
         console.error("Failed to register device:", err)
       );
 
       navigate("/journey");
     } catch (err: any) {
-      setError(err?.response?.data?.detail ?? "Login failed");
+      const msg =
+        err?.response?.data?.detail ??
+        err?.message ??
+        "Login failed";
+
+      // show in component state (for web / under form)
+      setError(msg);
+
+      // show as popup on phone
+      alert(msg);
     } finally {
       setLoading(false);
     }

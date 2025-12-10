@@ -2,6 +2,7 @@
 import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
+import guidedImg from "../assets/guided.png";
 
 const GuidedVisualizationBreathingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -10,11 +11,11 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
   const CREAM = "#f5e9d9";
   const PURPLE = "#5B5FEF";
 
-  // scroll-to-practice + scroll-to-top
+  // scroll-to-practice + scroll-to-top + video modal
   const practiceRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const practiceButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
 
   const handleScrollToPractice = () => {
     practiceRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -25,32 +26,17 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
   };
 
   const handleContentScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const target = e.currentTarget;
-    const scrolled = target.scrollTop;
-
-    let buttonVisible = false;
-    if (practiceButtonRef.current && contentRef.current) {
-      const btnRect = practiceButtonRef.current.getBoundingClientRect();
-      const contentRect = contentRef.current.getBoundingClientRect();
-      buttonVisible =
-        btnRect.top < contentRect.bottom && btnRect.bottom > contentRect.top;
-    }
-
-    setShowScrollTop(scrolled > 20 && !buttonVisible);
+    setShowScrollTop(e.currentTarget.scrollTop > 60);
   };
 
   const handleVideoClick = (
     e: React.MouseEvent<HTMLAnchorElement, MouseEvent>
   ) => {
     e.preventDefault();
-    window.open(
-      "https://youtu.be/enJyOTvEn4M?si=ZmUn15oTAaIHE_gh",
-      "_blank",
-      "noopener,noreferrer"
-    );
+    setShowVideoModal(true);
   };
 
-  // ===== STYLES =====
+  // ===== STYLES (same design language as Diaphragmatic / Counting / Alternate) =====
   const screenStyle: React.CSSProperties = {
     height: "100vh",
     width: "100vw",
@@ -78,116 +64,134 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
     position: "relative",
   };
 
+  // thin cream top bar with centered logo
   const topSectionStyle: React.CSSProperties = {
     backgroundColor: CREAM,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 6,
+    paddingBottom: 6,
     paddingInline: 16,
     display: "flex",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
-    height: 50,
   };
 
   const iconBtn: React.CSSProperties = {
     position: "absolute",
-    top: 14,
-    width: 42,
-    height: 42,
+    top: 8,
+    width: 35,
+    height: 35,
     borderRadius: 999,
     border: "none",
     cursor: "pointer",
-    backgroundColor: "#3970aaff",
+    backgroundColor: "#3970aa",
     color: CREAM,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: 20,
+    fontSize: 16,
     boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
   };
 
-  const homeBtnStyle: React.CSSProperties = { ...iconBtn, left: 12 };
-  const logoutBtnStyle: React.CSSProperties = { ...iconBtn, right: 12 };
+  const homeBtnStyle: React.CSSProperties = { ...iconBtn, left: 16 };
+  const logoutBtnStyle: React.CSSProperties = { ...iconBtn, right: 16 };
 
-  const titleBlockStyle: React.CSSProperties = {
+  const logoBlockStyle: React.CSSProperties = {
     display: "flex",
     flexDirection: "column",
-    gap: 2,
     alignItems: "center",
+    gap: 4,
   };
 
-  const smallLabelStyle: React.CSSProperties = {
-    color: "#5F8DD0",
-    fontSize: 14,
-    fontWeight: 600,
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-  };
-
-  const tinyLogoStyle: React.CSSProperties = {
-    width: 28,
-    height: 28,
+  const logoCircleStyle: React.CSSProperties = {
+    width: 40,
+    height: 40,
     borderRadius: "50%",
     overflow: "hidden",
     backgroundColor: CREAM,
-    display: "inline-flex",
+    display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.15)",
   };
 
-  const tinyLogoImgStyle: React.CSSProperties = {
+  const logoImgStyle: React.CSSProperties = {
     width: "130%",
     height: "130%",
     objectFit: "cover",
   };
 
-  const headerTitleStyle: React.CSSProperties = {
-    fontFamily: '"Times New Roman", Georgia, serif',
-    fontSize: 20,
+  const appNameStyle: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 600,
     color: "#5F8DD0",
+    letterSpacing: 0.5,
   };
 
   const contentStyle: React.CSSProperties = {
     flex: 1,
     backgroundColor: BLUE,
-    padding: "10px 20px 16px 20px",
+    padding: "18px 24px 16px 24px",
     display: "flex",
     flexDirection: "column",
-    gap: 14,
-    color: "#111827",
+    gap: 16,
+    color: "#f9fafb",
     overflowY: "auto",
   };
 
-  // arrow just under the nav to jump to practice
+  const heroTitleStyle: React.CSSProperties = {
+    fontSize: 22,
+    fontWeight: 700,
+    textAlign: "center",
+    marginBottom: 6,
+  };
+
+  const heroImageWrapperStyle: React.CSSProperties = {
+        marginTop: 4,
+        marginBottom: 10,
+        display: "flex",
+        justifyContent: "center",
+        backgroundColor: BLUE,      // same as page
+        borderRadius: 0,
+        overflow: "hidden",
+      };
+    
+      const heroImageStyle: React.CSSProperties = {
+        width: "100%",
+        height: 150,
+        maxWidth: 580,
+        display: "block",
+        mixBlendMode: "multiply",   // white turns into background color
+      };
+
+  const dividerStyle: React.CSSProperties = {
+    textAlign: "center",
+    letterSpacing: 4,
+    margin: "12px 0 4px 0",
+  };
+
+  // scroll-arrow button
   const scrollArrowWrapperStyle: React.CSSProperties = {
-    top: 0,
-    zIndex: 10,
     display: "flex",
     justifyContent: "center",
-    paddingTop: 4,
-    paddingBottom: 4,
-    backgroundColor: BLUE,
+    marginTop: 4,
+    marginBottom: 4,
   };
 
   const scrollArrowButtonStyle: React.CSSProperties = {
-    width: "100%",
-    height: 30,
-    borderRadius: "40%",
+    borderRadius: 999,
     border: "none",
     backgroundColor: "#F4C58F",
     color: "#3565AF",
     cursor: "pointer",
+    padding: "6px 14px",
     boxShadow: "0 4px 12px rgba(15,23,42,0.35)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 18,
+    fontSize: 14,
+    fontWeight: 600,
   };
 
-  // scroll-to-top button (upper arrow)
+  // scroll-to-top button
   const scrollTopBtnStyle: React.CSSProperties = {
     position: "absolute",
     right: 20,
@@ -196,7 +200,7 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
     height: 40,
     borderRadius: 999,
     border: "none",
-    backgroundColor: "#3970aaff",
+    backgroundColor: "#3970aa",
     color: CREAM,
     cursor: "pointer",
     boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
@@ -209,19 +213,16 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
 
   const sectionTitleStyle: React.CSSProperties = {
     marginTop: 8,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 700,
-    color: "#f9fafb",
+    color: "#ffffff",
   };
 
-  const textCardStyle: React.CSSProperties = {
-    backgroundColor: CREAM,
-    borderRadius: 20,
-    padding: "14px 14px 16px 14px",
-    boxShadow: "0 8px 20px rgba(15,23,42,0.18)",
+  // text directly on blue
+  const textBlockStyle: React.CSSProperties = {
     fontSize: 14,
-    lineHeight: 1.5,
-    color: "#111827",
+    lineHeight: 1.6,
+    color: "#f9fafb",
   };
 
   const tipsListStyle: React.CSSProperties = {
@@ -230,14 +231,14 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
     marginBottom: 4,
   };
 
+  // video card (same pattern as other pages)
   const videoCardStyle: React.CSSProperties = {
-    ...textCardStyle,
-    padding: "12px 12px 14px 12px",
+    ...textBlockStyle,
   };
 
   const videoThumbStyle: React.CSSProperties = {
     marginTop: 8,
-    borderRadius: 16,
+    borderRadius: 24,
     overflow: "hidden",
     background:
       "linear-gradient(135deg, #111827, #1f2937 40%, #2563eb 70%, #60a5fa)",
@@ -271,10 +272,16 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
     textShadow: "0 2px 6px rgba(0,0,0,0.6)",
   };
 
-  // practice card
+  // practice card – translucent on blue
   const practiceCardStyle: React.CSSProperties = {
-    ...textCardStyle,
     textAlign: "center",
+    backgroundColor: "rgba(249, 250, 251, 0.08)",
+    borderRadius: 16,
+    padding: "14px 14px 16px 14px",
+    boxShadow: "0 8px 20px rgba(15,23,42,0.18)",
+    fontSize: 14,
+    lineHeight: 1.5,
+    color: "#f9fafb",
   };
 
   const practiceButtonStyle: React.CSSProperties = {
@@ -290,12 +297,15 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
     cursor: "pointer",
   };
 
-  // little Mendly AI integration hint card
+  // AI hint card – soft gradient on blue
   const aiHintCardStyle: React.CSSProperties = {
-    ...textCardStyle,
-    fontSize: 13,
+    ...textBlockStyle,
     background:
-      "linear-gradient(135deg, rgba(244,197,143,0.25), rgba(91,95,239,0.08))",
+      "linear-gradient(135deg, rgba(244,197,143,0.28), rgba(91,95,239,0.16))",
+    borderRadius: 18,
+    padding: "12px 14px 14px 14px",
+    boxShadow: "0 6px 18px rgba(15,23,42,0.25)",
+    fontSize: 13,
   };
 
   // bottom nav
@@ -325,6 +335,57 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
     fontWeight: 600,
   };
 
+  // video modal
+  const modalOverlayStyle: React.CSSProperties = {
+    position: "absolute",
+    inset: 0,
+    backgroundColor: "rgba(15,23,42,0.55)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    zIndex: 30,
+  };
+
+  const modalCardStyle: React.CSSProperties = {
+    backgroundColor: CREAM,
+    borderRadius: 24,
+    padding: "16px 16px 18px 16px",
+    width: "100%",
+    maxWidth: 360,
+    boxShadow: "0 10px 30px rgba(15,23,42,0.4)",
+    textAlign: "center",
+    position: "relative",
+  };
+
+  const modalCloseBtnStyle: React.CSSProperties = {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    border: "none",
+    borderRadius: "999px",
+    width: 30,
+    height: 30,
+    cursor: "pointer",
+    backgroundColor: "#e5e7eb",
+    color: "#111827",
+    fontWeight: 700,
+  };
+
+  const videoFrameWrapperStyle: React.CSSProperties = {
+    width: "100%",
+    aspectRatio: "16 / 9",
+    borderRadius: 16,
+    overflow: "hidden",
+    marginTop: 8,
+  };
+
+  const videoIframeStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    border: "none",
+  };
+
   return (
     <div style={screenStyle}>
       <div style={phoneStyle}>
@@ -340,14 +401,13 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
             ⬅
           </button>
 
-          <div style={titleBlockStyle}>
-            <div style={smallLabelStyle}>
-              <span style={tinyLogoStyle}>
-                <img src={logo} alt="Mendly logo" style={tinyLogoImgStyle} />
-              </span>
-              Mendly App
+          <div style={logoBlockStyle}>
+            <div style={logoCircleStyle}>
+              <img src={logo} alt="Mendly logo" style={logoImgStyle} />
             </div>
-            <span style={headerTitleStyle}>Guided Visualization Breathing</span>
+            <div style={appNameStyle}>
+              <strong>Mendly App</strong>
+            </div>
           </div>
 
           <button
@@ -371,7 +431,19 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
           ref={contentRef}
           onScroll={handleContentScroll}
         >
-          {/* jump-to-practice arrow */}
+          {/* Hero title + image */}
+          <div>
+            <div style={heroTitleStyle}>Guided Visualization Breathing</div>
+            <div style={heroImageWrapperStyle}>
+              <img
+                src={guidedImg}
+                alt="Guided visualization breathing illustration"
+                style={heroImageStyle}
+              />
+            </div>
+          </div>
+
+          {/* scroll arrow to practice section */}
           <div style={scrollArrowWrapperStyle}>
             <button
               type="button"
@@ -384,21 +456,24 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
             </button>
           </div>
 
+          <div style={dividerStyle}>••••••••••••••••••••••••</div>
+
           {/* Purpose & Benefits */}
           <div>
             <div style={sectionTitleStyle}>Purpose &amp; benefits</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0 }}>
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4 }}>
               Guided visualization breathing combines slow, steady breathing
               with mental imagery. You&apos;re not just breathing—you&apos;re
               picturing calm entering and stress leaving.
             </p>
             <p>
-              It&apos;s excellent for emotional grounding and anxiety reduction,
-              especially when you feel mentally overloaded or stuck in strong
-              emotions. This style also fits perfectly with Mendly&apos;s AI
-              chat, where the companion can gently guide you step by step.
+              It&apos;s excellent for emotional grounding and anxiety
+              reduction, especially when you feel mentally overloaded or stuck
+              in strong emotions. This style also fits perfectly with
+              Mendly&apos;s AI chat, where the companion can gently guide you
+              step by step.
             </p>
           </div>
 
@@ -406,8 +481,8 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
           <div>
             <div style={sectionTitleStyle}>How to do it</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0, fontWeight: 600 }}>
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4, fontWeight: 600 }}>
               Try this simple visualization:
             </p>
             <ul style={tipsListStyle}>
@@ -437,8 +512,8 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
           <div>
             <div style={sectionTitleStyle}>Tips for deeper effect</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0 }}>
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4 }}>
               Visualization becomes more powerful when you add a few details:
             </p>
             <ul style={tipsListStyle}>
@@ -455,8 +530,9 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
                 or even dissolving into thin air.
               </li>
               <li>
-                Avoid doing this in a very noisy or distracting environment—it
-                works best when you can give it a few undisturbed minutes.
+                Avoid doing this in a very noisy or distracting
+                environment—it works best when you can give it a few
+                undisturbed minutes.
               </li>
             </ul>
           </div>
@@ -465,8 +541,8 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
           <div>
             <div style={sectionTitleStyle}>When can it help?</div>
           </div>
-          <div style={textCardStyle}>
-            <p style={{ marginTop: 0 }}>
+          <div style={textBlockStyle}>
+            <p style={{ marginTop: 4 }}>
               Guided visualization breathing is especially useful when emotions
               feel intense, heavy, or hard to name:
             </p>
@@ -491,17 +567,20 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
           {/* Mendly AI hint */}
           <div style={aiHintCardStyle}>
             <strong>💬 How Mendly can guide you</strong>
-            <p style={{ marginTop: 6, fontWeight:300 }}>
+            <p style={{ marginTop: 6, fontWeight: 300 }}>
               In future versions, your Mendly companion could guide this
               exercise step-by-step in real time—either by text or voice.
               Imagine the AI saying:{" "}
-              <em>&quot;Breathe in and picture that calm blue light filling
-              your chest… now breathe out and watch the stress leave as dark
-              smoke.&quot;</em>
+              <em>
+                &quot;Breathe in and picture that calm blue light filling your
+                chest… now breathe out and watch the stress leave as dark
+                smoke.&quot;
+              </em>
             </p>
-            <p style={{ marginBottom: 0, fontWeight:300 }}>
+            <p style={{ marginBottom: 0, fontWeight: 300 }}>
               You could trigger this from the chat whenever you type something
-              like &quot;I feel anxious&quot; or &quot;I need to calm down.&quot;
+              like &quot;I feel anxious&quot; or &quot;I need to calm
+              down.&quot;
             </p>
           </div>
 
@@ -526,13 +605,14 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
             </a>
           </div>
 
-          {/* Practice section */}
+          {/* Practice section – translucent card */}
+          <div style={dividerStyle}>••••••••••••••••••••••••</div>
           <div ref={practiceRef}>
             <div style={practiceCardStyle}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>
                 Try it now (2–3 minutes)
               </div>
-              <div style={{ fontSize: 13, color: "#4b5563" }}>
+              <div style={{ fontSize: 13, color: "#e5e7eb" }}>
                 Use this as a short &quot;Calm Space&quot; break:
               </div>
               <ul style={{ ...tipsListStyle, textAlign: "left" }}>
@@ -558,7 +638,6 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
                 type="button"
                 style={practiceButtonStyle}
                 onClick={handleScrollTop}
-                ref={practiceButtonRef}
               >
                 Finished a round? Back to top ↑
               </button>
@@ -611,6 +690,39 @@ const GuidedVisualizationBreathingPage: React.FC = () => {
             <div>Ai Chat</div>
           </button>
         </div>
+
+        {/* VIDEO MODAL */}
+        {showVideoModal && (
+          <div style={modalOverlayStyle}>
+            <div style={modalCardStyle}>
+              <button
+                type="button"
+                style={modalCloseBtnStyle}
+                onClick={() => setShowVideoModal(false)}
+                aria-label="Close"
+                title="Close"
+              >
+                ✕
+              </button>
+              <h3 style={{ margin: 0, marginBottom: 4, fontSize: 16 }}>
+                Guided Breathing &amp; Visualization – Video
+              </h3>
+              <p style={{ marginTop: 0, fontSize: 12, color: "#4b5563" }}>
+                Watch and follow along with this calming guided visualization
+                practice.
+              </p>
+              <div style={videoFrameWrapperStyle}>
+                <iframe
+                  src="https://www.youtube.com/embed/enJyOTvEn4M"
+                  title="Guided Breathing & Visualization – Calm practice"
+                  style={videoIframeStyle}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -35,20 +35,29 @@ CREATE TABLE dbo.UserSettings (
               CONSTRAINT PK_UserSettings PRIMARY KEY
               CONSTRAINT FK_UserSettings_Users 
                   FOREIGN KEY REFERENCES dbo.Users(user_id) ON DELETE CASCADE,
-    -- 1 = every day, 2 = every 2 days, 3 = every 3 days (example)
+
     checkin_frequency TINYINT NOT NULL 
         CONSTRAINT DF_UserSettings_Freq DEFAULT (3)
         CONSTRAINT CK_UserSettings_CheckinFreq CHECK (checkin_frequency IN (1,2,3)),
+
     motivation_enabled BIT NOT NULL 
         CONSTRAINT DF_UserSettings_Motivation DEFAULT (1),
+
     created_at DATETIMEOFFSET NOT NULL 
         CONSTRAINT DF_UserSettings_Created DEFAULT SYSDATETIMEOFFSET(),
+
     updated_at DATETIMEOFFSET NOT NULL 
         CONSTRAINT DF_UserSettings_Updated DEFAULT SYSDATETIMEOFFSET(),
+
     positive_notif_enabled BIT NOT NULL 
         CONSTRAINT DF_UserSettings_PosNotifEnabled DEFAULT (1),
+
     positive_notif_interval_minutes INT NOT NULL 
-        CONSTRAINT DF_UserSettings_PosNotifInterval DEFAULT (60)
+        CONSTRAINT DF_UserSettings_PosNotifInterval DEFAULT (60),
+
+    last_phq2_date DATE NULL,
+
+    last_photo_memory_date DATE NULL
 );
 GO
 
@@ -97,7 +106,6 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Ensure UserSettings row
     INSERT INTO dbo.UserSettings (user_id)
     SELECT i.user_id
     FROM inserted i
@@ -107,7 +115,6 @@ BEGIN
         WHERE s.user_id = i.user_id
     );
 
-    -- Default schedule: morning 09:00, noon 14:00, evening 21:00
     INSERT INTO dbo.CheckinSchedule (user_id, slot_name, local_hour, local_minute)
     SELECT 
         i.user_id,
@@ -243,7 +250,6 @@ BEGIN
     DECLARE @now   DATETIMEOFFSET = SYSDATETIMEOFFSET();
     DECLARE @today DATE           = CONVERT(date, @now);
 
-    -- Insert one reminder per user per day per slot
     INSERT INTO dbo.NotificationQueue (
           user_id,
           token_id,
@@ -254,7 +260,7 @@ BEGIN
     )
     SELECT
         cs.user_id,
-        NULL,  -- we'll choose device/token later in the sender job
+        NULL,  
         N'checkin_reminder',
         N'{
             "slot": "' + @slot_name + N'",
@@ -300,7 +306,7 @@ BEGIN
     )
     SELECT
         s.user_id,
-        NULL,  -- choose device inside notification_worker
+        NULL,  
         N'tip',
         N'{
             "title": "Mendly \u2022 A small positive moment",
@@ -400,6 +406,26 @@ CREATE TABLE dbo.AIInteractions (
 );
 CREATE INDEX IX_AIInteractions_User_Time ON dbo.AIInteractions(user_id, created_at DESC);
 GO
+
+------------------------------------------------------------
+-- 16) HappyMemories: user's positive photo memories 
+------------------------------------------------------------
+IF OBJECT_ID('dbo.HappyMemories','U') IS NOT NULL DROP TABLE dbo.HappyMemories;
+CREATE TABLE dbo.HappyMemories (
+    memory_id      UNIQUEIDENTIFIER NOT NULL 
+                     CONSTRAINT PK_HappyMemories PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    user_id        UNIQUEIDENTIFIER NOT NULL
+                     CONSTRAINT FK_HappyMemories_Users FOREIGN KEY REFERENCES dbo.Users(user_id) ON DELETE CASCADE,
+    image_url      NVARCHAR(512)    NOT NULL,     
+    caption        NVARCHAR(300)    NULL,
+    memory_date    DATE             NULL,         
+    created_at     DATETIMEOFFSET   NOT NULL CONSTRAINT DF_HappyMemories_Created DEFAULT SYSDATETIMEOFFSET()
+);
+GO
+
+CREATE INDEX IX_HappyMemories_User ON dbo.HappyMemories(user_id, created_at DESC);
+GO
+
 
 /* ===== Seed: Admin User (safe to re-run) ===== */
 BEGIN TRY

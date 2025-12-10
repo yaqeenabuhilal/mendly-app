@@ -23,6 +23,10 @@ import BoxBreathingPage from "./pages/BoxBreathingPage";
 import CountingBreathingPage from "./pages/CountingBreathsPage";
 import NostrilBreathingPage from "./pages/AlternateNostrilBreathingPage";
 import GuidedBreathingPage from "./pages/GuidedVisualizationBreathingPage";
+import Phq2Page from "./pages/Phq2Page";
+import Phq9Page from "./pages/Phq9Page";
+import SupportFinderPage from "./pages/SupportFinderPage";
+import PhotoMemoriesPage from "./pages/PhotoMemoriesPage";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -52,7 +56,11 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <Route path="/breathing/counting" element={<CountingBreathingPage />} />
         <Route path="/breathing/alternate-nostril" element={<NostrilBreathingPage />} />
         <Route path="/breathing/visualization" element={<GuidedBreathingPage />} />
-
+        <Route path="/phq2" element={<Phq2Page />} />
+        <Route path="/phq9" element={<Phq9Page />} />
+        <Route path="/support" element={<SupportFinderPage />} />
+        <Route path="/photo-memories" element={<PhotoMemoriesPage />} />
+        
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

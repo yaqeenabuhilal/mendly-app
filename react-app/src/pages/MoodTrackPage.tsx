@@ -251,9 +251,14 @@ const MoodTrackPage: React.FC = () => {
       );
       d.setUTCDate(d.getUTCDate() - i);
       const iso = isoDateUTC(d);
+      // before pushing, compute the score
+      const score =
+        map.has(iso) ? (map.get(iso) as number | null) : null;
+
       out.push({
         date: iso,
-        avg_score: map.has(iso) ? (map.get(iso) as number | null) : null,
+        avg_score: score,
+        value: score ?? 0,   // SeriesPoint.value required as number
       });
     }
     return out;

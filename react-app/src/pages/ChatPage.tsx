@@ -328,11 +328,11 @@ const ChatPage: React.FC = () => {
     flexDirection: "column",
     color: "white",
     boxSizing: "border-box",
+    overflowY: "auto",
   };
 
   const chatAreaStyle: React.CSSProperties = {
     flex: 1,
-    overflowY: "auto",
     padding: "4px 4px 8px 4px",
     display: "flex",
     flexDirection: "column",
