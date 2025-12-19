@@ -481,3 +481,62 @@ BEGIN CATCH
     IF @@TRANCOUNT > 0 ROLLBACK TRAN;
     THROW;
 END CATCH;
+
+CREATE TABLE dbo.AppointmentIntakes (
+  intake_id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID() PRIMARY KEY,
+  client_user_id UNIQUEIDENTIFIER NOT NULL,
+  psychologist_user_id UNIQUEIDENTIFIER NOT NULL,
+
+  answers_json NVARCHAR(MAX) NOT NULL,
+
+  created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET()
+);
+
+CREATE TABLE dbo.Appointments (
+  appointment_id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID() PRIMARY KEY,
+  client_user_id UNIQUEIDENTIFIER NOT NULL,
+  psychologist_user_id UNIQUEIDENTIFIER NOT NULL,
+
+  intake_id UNIQUEIDENTIFIER NULL,
+  start_at DATETIMEOFFSET NOT NULL,
+
+  status NVARCHAR(20) NOT NULL DEFAULT 'requested',
+  -- requested / approved / rejected / canceled / completed
+
+  notes NVARCHAR(500) NULL,
+
+  created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+  updated_at DATETIMEOFFSET NULL
+);
+
+-- optional FK
+-- ALTER TABLE dbo.Appointments ADD CONSTRAINT FK_Appointments_Intake
+-- FOREIGN KEY (intake_id) REFERENCES dbo.AppointmentIntakes(intake_id);
+
+ALTER TABLE dbo.Appointments
+ADD CONSTRAINT FK_Appointments_Intake
+FOREIGN KEY (intake_id) REFERENCES dbo.AppointmentIntakes(intake_id);
+
+CREATE INDEX IX_Appointments_Psy ON dbo.Appointments(psychologist_user_id, status, start_at);
+CREATE INDEX IX_Appointments_Client ON dbo.Appointments(client_user_id, status, start_at);
+CREATE INDEX IX_Intakes_Psy ON dbo.AppointmentIntakes(psychologist_user_id, created_at);
+
+ALTER TABLE dbo.Users
+ADD Role NVARCHAR(20) NOT NULL
+    CONSTRAINT DF_Users_Role DEFAULT ('regular');
+
+
+CREATE TABLE dbo.PsychologistProfiles (
+    user_id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+    specialty NVARCHAR(120) NOT NULL,
+    workplace NVARCHAR(200) NULL,
+    city NVARCHAR(120) NULL,
+    bio NVARCHAR(500) NULL,
+    years_experience INT NULL,
+    license_number NVARCHAR(80) NULL,
+
+    CONSTRAINT FK_PsychologistProfiles_Users
+        FOREIGN KEY (user_id) REFERENCES dbo.Users(user_id)
+        ON DELETE CASCADE
+);
+

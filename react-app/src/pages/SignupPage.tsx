@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signup } from "../api/auth";
+import { signupPsychologist } from "../api/auth";
 import logo from "../assets/mendly-logo.jpg";
 
 const SignupPage: React.FC = () => {
@@ -11,6 +12,15 @@ const SignupPage: React.FC = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState<"regular" | "psychologist">("regular");
+
+  // psychologist fields
+  const [specialty, setSpecialty] = useState("");
+  const [workplace, setWorkplace] = useState("");
+  const [city, setCity] = useState("");
+  const [bio, setBio] = useState("");
+  const [yearsExperience, setYearsExperience] = useState<number | "">("");
+  const [licenseNumber, setLicenseNumber] = useState("");
 
   const navigate = useNavigate();
 
@@ -20,13 +30,26 @@ const SignupPage: React.FC = () => {
     setLoading(true);
 
     try {
-      await signup({
-        username,
-        email,
-        password,
-        age: age === "" ? undefined : Number(age),
-        gender,
-      });
+      if (role === "regular") {
+  await signup({
+    username,
+    email,
+    password,
+    age: age === "" ? undefined : Number(age),
+    gender,
+  });
+  } else {
+  await signupPsychologist({
+    username,
+    email,
+    password,
+    age: age === "" ? undefined : Number(age),
+    gender,
+    specialty,
+    workplace,
+    city,
+  });
+}
 
       alert("Account created successfully, you can login now.");
       navigate("/login");
@@ -240,6 +263,22 @@ const SignupPage: React.FC = () => {
     textAlign: "center",
   };
 
+  const SPECIALTIES = [
+  "Clinical Psychology",
+  "CBT (Cognitive Behavioral Therapy)",
+  "DBT (Dialectical Behavior Therapy)",
+  "Trauma / PTSD",
+  "Child & Adolescent Psychology",
+  "Family & Couples Therapy",
+  "Anxiety Disorders",
+  "Mood Disorders",
+  "Addiction",
+  "Neuropsychology",
+  "Health Psychology",
+  "Other",
+];
+
+
   return (
     <div style={screenStyle}>
       <div style={phoneStyle}>
@@ -274,6 +313,19 @@ const SignupPage: React.FC = () => {
               alignItems: "center",
             }}
           >
+            {/* Account type */}
+              <div style={pillWrapperStyle}>
+                <select
+                  style={selectStyle}
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as "regular" | "psychologist")}
+                >
+                  <option value="regular">Regular user</option>
+                  <option value="psychologist">Psychologist</option>
+                </select>
+                <span style={caretStyle}>▼</span>
+              </div>
+
             {/* Username */}
             <div style={pillWrapperStyle}>
               <input
@@ -339,6 +391,50 @@ const SignupPage: React.FC = () => {
               </select>
               <span style={caretStyle}>▼</span>
             </div>
+            {role === "psychologist" && (
+            <>
+            <div style={pillWrapperStyle}>
+              <select
+                style={inputStyle}
+                value={specialty ?? ""}
+                onChange={(e) => setSpecialty(e.target.value)}
+                required
+              >
+                <option value="" disabled>
+                  Select specialty
+                </option>
+
+                {SPECIALTIES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+
+            <div style={pillWrapperStyle}>
+              <input
+                style={inputStyle}
+                type="text"
+                placeholder="Workplace"
+                value={workplace}
+                onChange={(e) => setWorkplace(e.target.value)}
+              />
+            </div>
+
+              <div style={pillWrapperStyle}>
+                <input
+                  style={inputStyle}
+                  type="text"
+                  placeholder="City"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+
 
             {error && <div style={errorStyle}>{error}</div>}
 

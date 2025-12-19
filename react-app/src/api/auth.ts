@@ -20,6 +20,11 @@ export const signup = (data: {
   gender?: number;
 }) => axios.post(`${API_BASE}/auth/signup`, data);
 
+export function signupPsychologist(data: any) {
+  return axios.post("http://localhost:8000/auth/signup-psychologist", data);
+}
+
+
 // ============== LOGIN ==============
 
 export interface LoginRequest {
@@ -30,7 +35,11 @@ export interface LoginRequest {
 export interface TokenResponse {
   access_token: string;
   token_type: string;
+  user_id: string;
+  username: string;
+  role: "regular" | "psychologist";
 }
+
 
 export async function login(payload: LoginRequest): Promise<TokenResponse> {
   const { data } = await axios.post<TokenResponse>(

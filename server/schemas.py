@@ -50,6 +50,7 @@ class UserPublic(BaseModel):
     email: str
     age: Optional[int]
     gender: Optional[int]
+    role: str   
 
     class Config:
         from_attributes = True
@@ -58,6 +59,10 @@ class UserPublic(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user_id: str
+    role: str
+    username: str
+
 
 
 class ChangePassword(BaseModel):
@@ -85,3 +90,18 @@ class DeviceRegister(BaseModel):
     fcm_token: str
     platform: str  # 'android' or 'ios'
     app_version: Optional[str] = None
+
+class PsychologistCreate(BaseModel):
+    username: UsernameStr  # type: ignore
+    email: EmailStr
+    password: PasswordStr  # type: ignore
+    age: Optional[int] = Field(default=None, ge=10, le=120)
+    gender: Optional[int] = Field(default=0, ge=0, le=3)
+
+    specialty: constr(min_length=2, max_length=120)  # type: ignore
+    workplace: Optional[constr(max_length=200)] = None  # type: ignore
+    city: Optional[constr(max_length=120)] = None  # type: ignore
+    bio: Optional[constr(max_length=500)] = None  # type: ignore
+    years_experience: Optional[int] = Field(default=None, ge=0, le=80)
+    license_number: Optional[constr(max_length=80)] = None  # type: ignore
+

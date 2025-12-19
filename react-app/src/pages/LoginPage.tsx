@@ -19,14 +19,24 @@ const LoginPage: React.FC = () => {
 
     try {
       const token = await login({ username, password });
-      localStorage.setItem("access_token", token.access_token);
 
-      // NEW: register device for push notifications
-      registerDeviceWithBackend(token.access_token).catch((err) =>
-        console.error("Failed to register device:", err)
-      );
+    localStorage.setItem("access_token", token.access_token);
 
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        user_id: token.user_id,
+        username: token.username,
+        role: token.role,
+      })
+    );
+
+    if (token.role === "psychologist") {
+      navigate("/psy");
+    } else {
       navigate("/journey");
+    }
+
     } catch (err: any) {
       const msg =
         err?.response?.data?.detail ??

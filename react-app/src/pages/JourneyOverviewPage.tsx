@@ -1019,6 +1019,14 @@ const JourneyOverviewPage: React.FC = () => {
               >
                 Mood Track
               </button>
+
+              <button
+                type="button"
+                style={{ ...actionBtn, paddingBlock: 14 }}
+                onClick={() => navigate("/psychologists")}
+              >
+                Find a Psychologist
+              </button>
             </div>
 
             {/* Positive Notifications button – full width */}

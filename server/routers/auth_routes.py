@@ -7,10 +7,16 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from typing import Dict
 
+# server/routers/auth_routes.py
+from pydantic import BaseModel
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status, Header
 from jose import JWTError, jwt
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from ..schemas import PsychologistCreate
 
 from ..deps import get_db
 from ..auth import (
@@ -32,19 +38,18 @@ from ..schemas import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# ================== SIGNUP ==================
+from sqlalchemy.exc import IntegrityError
+
 @router.post("/signup", response_model=UserPublic)
 def signup(payload: UserCreate, db: Session = Depends(get_db)):
     # 1) Check if username or email already exist
     existing = db.execute(
-        text(
-            """
-            SELECT TOP 1 user_id, Username, Email, Age, Gender
+        text("""
+            SELECT TOP 1 user_id
             FROM dbo.Users
-            WHERE Username = :username OR Email = :email
-        """
-        ),
-        {"username": payload.username, "email": payload.email},
+            WHERE Email = :email OR Username = :username
+        """),
+        {"email": payload.email, "username": payload.username},
     ).fetchone()
 
     if existing:
@@ -53,35 +58,42 @@ def signup(payload: UserCreate, db: Session = Depends(get_db)):
             detail="Username or email already in use",
         )
 
-    # 2) INSERT without user_id – let DEFAULT NEWSEQUENTIALID() handle it
-    db.execute(
-        text(
-            """
-            INSERT INTO dbo.Users (Username, Email, Password, Age, Gender)
-            VALUES (:username, :email, :password, :age, :gender)
-        """
-        ),
-        {
-            "username": payload.username,
-            "email": payload.email,
-            "password": hash_password(payload.password),
-            "age": payload.age,
-            "gender": payload.gender,
-        },
-    )
-    db.commit()
+    # 2) Insert user
+    try:
+        db.execute(
+            text("""
+                INSERT INTO dbo.Users (Username, Email, Password, Age, Gender, Role)
+                VALUES (:username, :email, :password, :age, :gender, :role)
+            """),
+            {
+                "username": payload.username,
+                "email": payload.email,
+                "password": hash_password(payload.password),
+                "age": payload.age,
+                "gender": payload.gender,
+                "role": "regular",
+            },
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username or email already in use",
+        )
 
-    # 3) Fetch the created user to return as UserPublic
+    # 3) Fetch created user (include Role!)
     row = db.execute(
-        text(
-            """
-            SELECT TOP 1 user_id, Username, Email, Age, Gender
+        text("""
+            SELECT TOP 1 user_id, Username, Email, Age, Gender, Role
             FROM dbo.Users
-            WHERE Username = :username
-        """
-        ),
-        {"username": payload.username},
+            WHERE Email = :email
+        """),
+        {"email": payload.email},
     ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=500, detail="User created but not found")
 
     return UserPublic(
         user_id=str(row.user_id),
@@ -89,7 +101,108 @@ def signup(payload: UserCreate, db: Session = Depends(get_db)):
         email=row.Email,
         age=row.Age,
         gender=row.Gender,
+        role=row.Role,
     )
+
+
+@router.post("/signup-psychologist", response_model=UserPublic)
+def signup_psychologist(payload: PsychologistCreate, db: Session = Depends(get_db)):
+    # 1) Check unique (email OR username)
+    existing = db.execute(
+        text("""
+            SELECT TOP 1 user_id
+            FROM dbo.Users
+            WHERE Email = :email OR Username = :username
+        """),
+        {"email": payload.email, "username": payload.username},
+    ).fetchone()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="Username or email already in use")
+
+    # ✅ (اختياري بس قوي) تمنعي تكرار رقم الرخصة
+    lic_exists = db.execute(
+        text("""
+            SELECT TOP 1 user_id
+            FROM dbo.PsychologistProfiles
+            WHERE license_number = :lic
+        """),
+        {"lic": payload.license_number},
+    ).fetchone()
+    if lic_exists:
+        raise HTTPException(status_code=400, detail="License number already in use")
+
+    try:
+        # 2) Insert user
+        db.execute(
+            text("""
+                INSERT INTO dbo.Users (Username, Email, Password, Age, Gender, Role)
+                VALUES (:username, :email, :password, :age, :gender, :role)
+            """),
+            {
+                "username": payload.username,
+                "email": payload.email,
+                "password": hash_password(payload.password),
+                "age": payload.age,
+                "gender": payload.gender,
+                "role": "psychologist",
+            },
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Username or email already in use")
+
+    try:
+        # 3) Fetch created user (include Role!)  ✅ بدون created_at
+        row = db.execute(
+            text("""
+                SELECT TOP 1 user_id, Username, Email, Age, Gender, Role
+                FROM dbo.Users
+                WHERE Email = :email
+            """),
+            {"email": payload.email},
+        ).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=500, detail="User created but not found")
+
+        # 4) Insert psychologist profile
+        db.execute(
+            text("""
+                INSERT INTO dbo.PsychologistProfiles
+                (user_id, specialty, workplace, city, bio, years_experience, license_number)
+                VALUES (:user_id, :specialty, :workplace, :city, :bio, :years_experience, :license_number)
+            """),
+            {
+                "user_id": row.user_id,
+                "specialty": payload.specialty,
+                "workplace": payload.workplace,
+                "city": payload.city,
+                "bio": payload.bio,
+                "years_experience": payload.years_experience,
+                "license_number": payload.license_number,
+            },
+        )
+        db.commit()
+
+        return UserPublic(
+            user_id=str(row.user_id),
+            username=row.Username,
+            email=row.Email,
+            age=row.Age,
+            gender=row.Gender,
+            role=row.Role,
+        )
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Psychologist profile already exists")
+    except Exception:
+        db.rollback()
+        raise
+
+
 
 
 # ================== LOGIN ==================
@@ -98,7 +211,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     row = db.execute(
         text(
             """
-            SELECT TOP 1 user_id, Username, Email, Password
+            SELECT TOP 1 user_id, Username, Email, Password, Role
             FROM dbo.Users
             WHERE Username = :username
         """
@@ -116,7 +229,13 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(
         {"sub": str(row.user_id), "username": row.Username}
     )
-    return Token(access_token=access_token)
+    return Token(
+    access_token=access_token,
+    user_id=str(row.user_id),
+    role=row.Role,
+    username=row.Username,
+)
+
 
 
 # ================== FORGOT PASSWORD (email + code) ==================
@@ -275,32 +394,58 @@ def _user_id_from_authorization(authorization: str = Header(...)) -> str:
     return str(sub)
 
 
-@router.get("/me", response_model=UserPublic)
+@router.get("/me")
 def get_me(
     user_id: str = Depends(_user_id_from_authorization),
     db: Session = Depends(get_db),
 ):
-    row = db.execute(
+    user = db.execute(
         text(
             """
-            SELECT TOP 1 user_id, Username, Email, Age, Gender
+            SELECT TOP 1 user_id, Username, Email, Age, Gender, Role
             FROM dbo.Users
             WHERE user_id = :uid
-        """
+            """
         ),
         {"uid": user_id},
     ).fetchone()
 
-    if not row:
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return UserPublic(
-        user_id=str(row.user_id),
-        username=row.Username,
-        email=row.Email,
-        age=row.Age,
-        gender=row.Gender,
-    )
+    psychologist_profile = None
+
+    if user.Role == "psychologist":
+        psy = db.execute(
+            text(
+                """
+                SELECT TOP 1 specialty, workplace, city, bio, years_experience, license_number
+                FROM dbo.PsychologistProfiles
+                WHERE user_id = :uid
+                """
+            ),
+            {"uid": user_id},
+        ).fetchone()
+
+        if psy:
+            psychologist_profile = {
+                "specialty": psy.specialty,
+                "workplace": psy.workplace,
+                "city": psy.city,
+                "bio": psy.bio,
+                "years_experience": psy.years_experience,
+                "license_number": psy.license_number,
+            }
+
+    return {
+        "user_id": str(user.user_id),
+        "username": user.Username,
+        "email": user.Email,
+        "age": user.Age,
+        "gender": user.Gender,
+        "role": user.Role,
+        "psychologist_profile": psychologist_profile,
+    }
 
 
 @router.put("/me", response_model=UserPublic)
@@ -309,7 +454,6 @@ def update_me(
     user_id: str = Depends(_user_id_from_authorization),
     db: Session = Depends(get_db),
 ):
-    # Frontend always sends username, email, age, gender
     db.execute(
         text(
             """
@@ -320,7 +464,7 @@ def update_me(
                 Gender   = :gender,
                 updated_at = SYSDATETIMEOFFSET()
             WHERE user_id = :uid
-        """
+            """
         ),
         {
             "username": payload.username,
@@ -335,10 +479,10 @@ def update_me(
     row = db.execute(
         text(
             """
-            SELECT TOP 1 user_id, Username, Email, Age, Gender
+            SELECT TOP 1 user_id, Username, Email, Age, Gender, Role
             FROM dbo.Users
             WHERE user_id = :uid
-        """
+            """
         ),
         {"uid": user_id},
     ).fetchone()
@@ -352,7 +496,9 @@ def update_me(
         email=row.Email,
         age=row.Age,
         gender=row.Gender,
+        role=row.Role,
     )
+
 
 
 # ================== CHANGE PASSWORD (PROFILE) ==================
@@ -403,3 +549,87 @@ def change_password(
     db.commit()
 
     return {"ok": True, "message": "Password updated successfully."}
+
+class PsychologistProfileUpdate(BaseModel):
+    specialty: str
+    workplace: str
+    city: str
+    bio: str
+    years_experience: Optional[int] = None
+    license_number: Optional[str] = None
+
+
+@router.put("/psychologist-profile")
+def upsert_psychologist_profile(
+    payload: PsychologistProfileUpdate,
+    user_id: str = Depends(_user_id_from_authorization),
+    db: Session = Depends(get_db),
+):
+    # 1) confirm user is psychologist
+    user = db.execute(
+        text("""
+            SELECT TOP 1 user_id, Role
+            FROM dbo.Users
+            WHERE user_id = :uid
+        """),
+        {"uid": user_id},
+    ).fetchone()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.Role != "psychologist":
+        raise HTTPException(status_code=403, detail="Only psychologists can update this profile")
+
+    # 2) check if profile exists
+    existing = db.execute(
+        text("""
+            SELECT TOP 1 user_id
+            FROM dbo.PsychologistProfiles
+            WHERE user_id = :uid
+        """),
+        {"uid": user_id},
+    ).fetchone()
+
+    if existing:
+        db.execute(
+            text("""
+                UPDATE dbo.PsychologistProfiles
+                SET specialty = :specialty,
+                    workplace = :workplace,
+                    city = :city,
+                    bio = :bio,
+                    years_experience = :years_experience,
+                    license_number = :license_number
+                WHERE user_id = :uid
+            """),
+            {
+                "uid": user_id,
+                "specialty": payload.specialty,
+                "workplace": payload.workplace,
+                "city": payload.city,
+                "bio": payload.bio,
+                "years_experience": payload.years_experience,
+                "license_number": payload.license_number,
+            },
+        )
+    else:
+        db.execute(
+            text("""
+                INSERT INTO dbo.PsychologistProfiles
+                (user_id, specialty, workplace, city, bio, years_experience, license_number)
+                VALUES (:uid, :specialty, :workplace, :city, :bio, :years_experience, :license_number)
+            """),
+            {
+                "uid": user_id,
+                "specialty": payload.specialty,
+                "workplace": payload.workplace,
+                "city": payload.city,
+                "bio": payload.bio,
+                "years_experience": payload.years_experience,
+                "license_number": payload.license_number,
+            },
+        )
+
+    db.commit()
+    return {"ok": True}

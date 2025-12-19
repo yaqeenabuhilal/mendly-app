@@ -27,6 +27,19 @@ import Phq2Page from "./pages/Phq2Page";
 import Phq9Page from "./pages/Phq9Page";
 import SupportFinderPage from "./pages/SupportFinderPage";
 import PhotoMemoriesPage from "./pages/PhotoMemoriesPage";
+import PsychologistHome from "./pages/PsychologistHome";
+import PsychologistProfilePage from "./pages/PsychologistProfilePage";
+import PsychologistCompleteProfilePage from "./pages/PsychologistCompleteProfilePage";
+import PsychologistsDirectoryPage from "./pages/PsychologistsDirectoryPage";
+import PsychologistEditProfilePage from "./pages/PsychologistEditProfilePage";
+import PsychologistPublicProfilePage from "./pages/PsychologistPublicProfilePage.tsx";
+import IntakeChatPage from "./pages/IntakeChatPage";
+import ChooseAppointmentPage from "./pages/ChooseAppointmentPage";
+import AppointmentSubmittedPage from "./pages/AppointmentSubmittedPage";
+import PsychologistRequestsPage from "./pages/PsychologistRequestsPage";
+import PsychologistIntakeViewerPage from "./pages/PsychologistIntakeViewerPage";
+import PsychologistRequestDetailsPage from "./pages/PsychologistRequestDetailsPage";
+
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -44,6 +57,12 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/journey" element={<JourneyOverviewPage />} />
+        <Route path="/psy" element={<PsychologistHome />} />
+        <Route path="/psy/profile" element={<PsychologistProfilePage />} />
+        <Route path="/psy/complete-profile" element={<PsychologistCompleteProfilePage />} />
+        <Route path="/psychologists" element={<PsychologistsDirectoryPage />} />
+        <Route path="/psy/profile/edit" element={<PsychologistEditProfilePage />}/>
+        <Route path="/psychologists/:id" element={<PsychologistPublicProfilePage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/check-in" element={<CheckInPage />} />
         <Route path="/mood-track" element={<MoodTrackPage />} />
@@ -60,7 +79,13 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <Route path="/phq9" element={<Phq9Page />} />
         <Route path="/support" element={<SupportFinderPage />} />
         <Route path="/photo-memories" element={<PhotoMemoriesPage />} />
-        
+        <Route path="/psychologists/:id/intake" element={<IntakeChatPage />} />
+        <Route path="/psychologists/:id/choose-time" element={<ChooseAppointmentPage />} />
+        <Route path="/appointment/submitted" element={<AppointmentSubmittedPage />} />
+        <Route path="/psy/requests" element={<PsychologistRequestsPage />} />
+        <Route path="/psy/intakes/:intakeId" element={<PsychologistIntakeViewerPage />} />
+        <Route path="/psy/requests/:appointmentId" element={<PsychologistRequestDetailsPage />} />
+
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

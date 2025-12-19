@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI  # type: ignore
 from fastapi.staticfiles import StaticFiles  # <-- added
 from sqlalchemy import text  # type: ignore
+from server.routers.psychologists_routes import router as psychologists_router
+from server.routers.appointments_routes import router as appointments_router
 
 from .db import engine, SessionLocal
 from .init_db import ensure_database_and_schema
@@ -152,6 +154,8 @@ app.include_router(device_routes.router)
 app.include_router(support_routes.router)
 app.include_router(screenings_routes.router)
 app.include_router(photo_memory_routes.router)
+app.include_router(psychologists_router)
+app.include_router(appointments_router)
 
 
 @app.get("/health/db")
