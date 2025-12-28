@@ -484,16 +484,25 @@ END CATCH;
 
 CREATE TABLE dbo.AppointmentIntakes (
   intake_id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID() PRIMARY KEY,
+
   client_user_id UNIQUEIDENTIFIER NOT NULL,
   psychologist_user_id UNIQUEIDENTIFIER NOT NULL,
 
   answers_json NVARCHAR(MAX) NOT NULL,
 
-  created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET()
+  created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+
+  CONSTRAINT FK_Intakes_Client
+    FOREIGN KEY (client_user_id) REFERENCES dbo.Users(user_id) ON DELETE CASCADE,
+
+  CONSTRAINT FK_Intakes_Psychologist
+    FOREIGN KEY (psychologist_user_id) REFERENCES dbo.Users(user_id)
 );
+
 
 CREATE TABLE dbo.Appointments (
   appointment_id UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID() PRIMARY KEY,
+
   client_user_id UNIQUEIDENTIFIER NOT NULL,
   psychologist_user_id UNIQUEIDENTIFIER NOT NULL,
 
@@ -506,8 +515,18 @@ CREATE TABLE dbo.Appointments (
   notes NVARCHAR(500) NULL,
 
   created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
-  updated_at DATETIMEOFFSET NULL
+  updated_at DATETIMEOFFSET NULL,
+
+  CONSTRAINT FK_Appointments_Client
+    FOREIGN KEY (client_user_id) REFERENCES dbo.Users(user_id) ON DELETE CASCADE,
+
+  CONSTRAINT FK_Appointments_Psychologist
+    FOREIGN KEY (psychologist_user_id) REFERENCES dbo.Users(user_id),
+
+  CONSTRAINT FK_Appointments_Intake
+    FOREIGN KEY (intake_id) REFERENCES dbo.AppointmentIntakes(intake_id)
 );
+
 
 -- optional FK
 -- ALTER TABLE dbo.Appointments ADD CONSTRAINT FK_Appointments_Intake

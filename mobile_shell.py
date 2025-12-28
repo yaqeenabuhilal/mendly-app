@@ -31,7 +31,7 @@ def main():
     page.featurePermissionRequested.connect(on_feature_permission_requested)
 
     # Phone-like window size
-    view.resize(390, 620)
+    view.resize(390, 750)
     view.setMinimumSize(300, 500)
 
     print(f"[mobile_shell] loading URL: {APP_URL}")

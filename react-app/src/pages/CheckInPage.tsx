@@ -164,6 +164,14 @@ const CheckInPage: React.FC = () => {
     boxShadow: "0 10px 25px rgba(15,23,42,0.18)",
   };
 
+  const card2: React.CSSProperties = {
+    backgroundColor: CREAM,
+    borderRadius: 20,
+    padding: "16px 16px 18px 16px",
+    boxShadow: "0 10px 25px rgba(15,23,42,0.18)",
+    marginTop:20,
+  };
+
   const labelStyle: React.CSSProperties = {
     fontSize: 18,
     fontWeight: 700,
@@ -309,15 +317,18 @@ const CheckInPage: React.FC = () => {
   // ----- handlers -----
 
   // NOTE FIELD – when user types here, clear emoji & list
-  const handleNoteChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    const value = e.target.value;
-    setNote(value);
-    if (value.trim().length > 0) {
-      setLabel("");
-      setEmojiScore(null);
-      setListScore(null);
-    }
+  const handleNoteChange: React.ChangeEventHandler<
+      HTMLInputElement | HTMLTextAreaElement
+    > = (e) => {
+      const value = e.target.value;
+      setNote(value);
+      if (value.trim().length > 0) {
+        setLabel("");
+        setEmojiScore(null);
+        setListScore(null);
+      }
   };
+
 
   // EMOJI CLICK – when user picks emoji, clear note & list
   const handleEmojiClick = (value: number) => {
@@ -465,15 +476,25 @@ const CheckInPage: React.FC = () => {
         {/* CONTENT */}
         <div style={contentStyle}>
           {/* NOTE CARD */}
-          <div style={card}>
+          <div style={card2}>
             <div style={labelStyle}>How do you feel today?</div>
-            <input
-              style={inputStyle}
+
+            <textarea
+              style={{
+                ...inputStyle,
+                minHeight: 52,      // ~2 lines height
+                resize: "none",     // optional: prevent dragging
+                paddingTop: 10,
+                paddingBottom: 10,
+                lineHeight: 1.4,
+              }}
+              rows={2}
               placeholder="Tell us in your own words"
               value={note}
               onChange={handleNoteChange}
             />
           </div>
+
 
           {/* EMOJI CARD */}
           <div style={card}>

@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login } from "../api/auth";
 import logo from "../assets/mendly-logo.jpg"; // <-- your logo file
-import { registerDeviceWithBackend } from "../utils/registerDevice";
 
 const LoginPage: React.FC = () => {
   const [username, setUsername] = useState("");

@@ -1,8 +1,9 @@
 // react-app/src/pages/ForgotPasswordPage.tsx
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
 import { requestPasswordReset, verifyPasswordReset } from "../api/auth";
 import logo from "../assets/mendly-logo.jpg";
+import { Link, useNavigate } from "react-router-dom";
+
 
 const ForgotPasswordPage: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
@@ -10,6 +11,8 @@ const ForgotPasswordPage: React.FC = () => {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
+
+  const navigate = useNavigate();
 
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +107,24 @@ const ForgotPasswordPage: React.FC = () => {
     position: "relative",
     overflow: "hidden",
   };
+
+  const homeIconButtonStyle: React.CSSProperties = {
+      position: "absolute",
+      top: 16,
+      left: 16,
+      width: 40,
+      height: 40,
+      borderRadius: "50%",
+      border: "none",
+      backgroundColor: BLUE,
+      color: CREAM,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      boxShadow: "0 6px 16px rgba(0,0,0,0.18)",
+      cursor: "pointer",
+      fontSize: 20,
+    };
 
   const tornEdgeStyle: React.CSSProperties = {
     position: "absolute",
@@ -226,6 +247,14 @@ const ForgotPasswordPage: React.FC = () => {
       <div style={phoneStyle}>
         {/* TOP / LOGO SECTION */}
         <div style={topSectionStyle}>
+          <button
+            type="button"
+            style={homeIconButtonStyle}
+            onClick={() => navigate("/emotional-balance")}
+            aria-label="Back to home page"
+          >
+            🏠
+          </button>
           <div style={logoCircleStyle} />
           <div style={appNameStyle}>Mendly App</div>
           <div style={tornEdgeStyle} />

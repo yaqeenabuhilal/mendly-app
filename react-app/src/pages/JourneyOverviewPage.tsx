@@ -1,22 +1,28 @@
-import React, { useState, useEffect } from "react";
+// react-app/src/pages/JourneyOverviewPage.tsx
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/mendly-logo.jpg";
 import heroImage from "../assets/peace-quote.png";
+import { getMoodSeries, type SeriesPoint } from "../api/auth";
 import {
-  getMoodSeries,
-  type SeriesPoint,
-} from "../api/auth";
+  startListening as startAudioMonitor,
+  stopListening as stopAudioMonitor,
+} from "../utils/audioMonitor";
+
+import { Capacitor } from "@capacitor/core";
+
+// ✅ Background “always-on” audio monitor (Foreground Service)
+import { AudioMonitor, type AudioEvent } from "../plugins/AudioMonitor";
 
 const LOW_MOOD_THRESHOLD = 2; // <= avg → PHQ intro
 const MEMORY_LOW_MOOD_THRESHOLD = 3; // <= avg → happy memories popup
 
 // 🔹 API base for backend calls
 const isNative = (window as any).Capacitor?.isNativePlatform?.() ?? false;
-  const API_BASE =
-    isNative
-      ? "http://10.0.2.2:8000"                   // emulator → host machine
-      : (import.meta.env.VITE_API_URL as string | undefined) ??
-        "http://localhost:8000";
+const API_BASE = isNative
+  ? "http://10.0.2.2:8000" // emulator → host machine
+  : (import.meta.env.VITE_API_URL as string | undefined) ??
+    "http://localhost:8000";
 
 interface PendingMemory {
   id: string; // local-only id
@@ -310,8 +316,6 @@ const JourneyOverviewPage: React.FC = () => {
 
     const alreadySawMemoriesToday = lastMemoriesDate === today;
     if (alreadySawMemoriesToday) {
-      // already showed some memories today (either low-mood popup or weekly),
-      // so skip this weekly reminder
       return;
     }
   }, [screeningStatusLoaded, lastPhotoMemoriesDate]);
@@ -324,7 +328,6 @@ const JourneyOverviewPage: React.FC = () => {
 
   // ===== Happy memories: LOCAL helpers (add & save) =====
 
-  // Add one memory to the local list (DOES NOT upload yet)
   const handleAddPendingMemory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFile) {
@@ -350,7 +353,6 @@ const JourneyOverviewPage: React.FC = () => {
       },
     ]);
 
-    // reset inline inputs
     setNewFile(null);
     setNewCaption("");
     setNewMemoryDate("");
@@ -363,7 +365,6 @@ const JourneyOverviewPage: React.FC = () => {
     setMemoriesError(null);
   };
 
-  // Edit caption or date of a local pending memory
   const handlePendingFieldChange = (
     id: string,
     field: "caption" | "memoryDate",
@@ -381,7 +382,6 @@ const JourneyOverviewPage: React.FC = () => {
     );
   };
 
-  // Delete from modal only (does NOT touch backend)
   const handleRemovePendingMemory = (id: string) => {
     setPendingMemories((prev) => {
       const target = prev.find((m) => m.id === id);
@@ -392,7 +392,6 @@ const JourneyOverviewPage: React.FC = () => {
     });
   };
 
-  // Save ALL pending memories to backend, then clear + go to /photo-memories
   const handleSaveAllMemories = async () => {
     if (!pendingMemories.length) {
       setMemoriesError("Add at least one photo before saving.");
@@ -438,7 +437,6 @@ const JourneyOverviewPage: React.FC = () => {
         }
       }
 
-      // success → clean previews + clear list, close modal, go to memories page
       pendingMemories.forEach((m) => URL.revokeObjectURL(m.previewUrl));
       setPendingMemories([]);
       setShowMemoriesModal(false);
@@ -451,13 +449,165 @@ const JourneyOverviewPage: React.FC = () => {
     }
   };
 
-  // cleanup previews on unmount
   useEffect(
     () => () => {
       pendingMemories.forEach((m) => URL.revokeObjectURL(m.previewUrl));
     },
     [pendingMemories]
   );
+
+  const safeMsg = (e: any) => {
+  if (!e) return "Unknown error";
+  if (typeof e === "string") return e;
+  if (typeof e?.message === "string") return e.message;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+};
+
+const logToServer = async (message: string, extra?: any) => {
+  try {
+    const token = window.localStorage.getItem("access_token");
+    await fetch(`${API_BASE}/debug/log`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        source: "JourneyOverviewPage.AudioMonitor",
+        message,
+        extra,
+        ts: new Date().toISOString(),
+      }),
+    });
+  } catch {
+    // ignore if backend endpoint doesn't exist / network error
+  }
+};
+
+
+  // =========================
+// 🎙️ Background Audio Monitor (Foreground Service)
+// =========================
+const [isListening, setIsListening] = useState(false);
+const [voiceText, setVoiceText] = useState<string>("");
+const [voiceError, setVoiceError] = useState<string | null>(null);
+const [lastAudioEvent, setLastAudioEvent] = useState<AudioEvent | null>(null);
+
+const isNativePlatform = Capacitor.isNativePlatform?.() ?? false;
+const isAndroid =
+  isNativePlatform && (Capacitor.getPlatform?.() ?? "") === "android";
+
+const audioListenerRef = useRef<{ remove: () => void } | null>(null);
+
+// On mount: attach listener (only once) + sync running state
+useEffect(() => {
+  let cancelled = false;
+
+  const setup = async () => {
+    if (!isAndroid) return;
+
+    try {
+      // sync running state (service may still be running from before)
+      const st = await AudioMonitor.isRunning();
+      if (!cancelled) setIsListening(!!st?.running);
+
+      // attach event listener once
+      if (!audioListenerRef.current) {
+        const handle = await AudioMonitor.addListener("audioEvent", (ev) => {
+          setLastAudioEvent(ev);
+
+          const label =
+            ev.type === "CRY"
+              ? "Possible crying detected"
+              : ev.type === "SCREAM"
+              ? "Loud / stress sound detected"
+              : ev.type === "SILENCE"
+              ? "Silence"
+              : "Sound detected";
+
+          setVoiceText(`${label} (${Math.round((ev.confidence ?? 0) * 100)}%)`);
+        });
+
+        audioListenerRef.current = handle as any;
+      }
+    } catch (e) {
+      console.warn("AudioMonitor setup failed", e);
+    }
+  };
+
+  void setup();
+
+  return () => {
+    cancelled = true;
+
+    // remove JS listener only (do NOT stop service on unmount)
+    try {
+      audioListenerRef.current?.remove?.();
+    } catch {
+      /* ignore */
+    } finally {
+      audioListenerRef.current = null;
+    }
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+// ✅ UI handlers (renamed so they don't clash with imports)
+const handleStartListening = async () => {
+  setVoiceError(null);
+  setVoiceText("");
+  setLastAudioEvent(null);
+
+  if (!isAndroid) {
+    const msg = "Background voice monitoring works only in the Android app.";
+    setVoiceError(msg);
+    alert(msg);
+    return;
+  }
+
+  try {
+    await startAudioMonitor(); // your imported wrapper
+    setIsListening(true);
+    setVoiceText("Mendly is listening in the background. Check your notification.");
+  } catch (e: any) {
+    const msg = safeMsg(e);
+    console.error("Audio monitor start failed:", e);
+    setVoiceError(msg);
+    alert("Audio monitor start failed:\n" + msg);
+
+    // 🔥 send to backend terminal (if you add /debug/log)
+    await logToServer("Audio monitor START failed", { msg, raw: e });
+
+    setIsListening(false);
+  }
+};
+
+
+const handleStopListening = async () => {
+  setVoiceError(null);
+
+  try {
+    if (!isAndroid) {
+      setIsListening(false);
+      return;
+    }
+    await stopAudioMonitor(); // your imported wrapper
+  } catch (e: any) {
+    const msg = safeMsg(e);
+    console.warn("Audio monitor stop failed:", e);
+    setVoiceError(msg);
+    alert("Audio monitor stop failed:\n" + msg);
+    await logToServer("Audio monitor STOP failed", { msg, raw: e });
+  } finally {
+    setIsListening(false);
+    setVoiceText("Stopped listening.");
+  }
+};
+
 
   // ===== STYLES =====
   const screenStyle: React.CSSProperties = {
@@ -904,7 +1054,7 @@ const JourneyOverviewPage: React.FC = () => {
 
   const fullScreenCaption: React.CSSProperties = {
     marginTop: 10,
-    color: "#e5e7eb",
+    color: "#e5e9eb",
     fontSize: 14,
     textAlign: "center",
   };
@@ -922,6 +1072,25 @@ const JourneyOverviewPage: React.FC = () => {
     cursor: "pointer",
     fontSize: 18,
     boxShadow: "0 8px 20px rgba(0,0,0,0.6)",
+  };
+
+  const micBtnStyle: React.CSSProperties = {
+    position: "absolute",
+    right: 16,
+    bottom: 70, // above bottom nav
+    width: 52,
+    height: 52,
+    borderRadius: 999,
+    border: "none",
+    cursor: "pointer",
+    backgroundColor: isListening ? "#dc2626" : "#2563eb",
+    color: "#f9fafb",
+    fontSize: 22,
+    boxShadow: "0 12px 26px rgba(0,0,0,0.25)",
+    zIndex: 60,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   };
 
   return (
@@ -942,11 +1111,7 @@ const JourneyOverviewPage: React.FC = () => {
           <div style={titleBlockStyle}>
             <div style={smallLabelStyle}>
               <span style={tinyLogoStyle}>
-                <img
-                  src={logo}
-                  alt="Mendly logo"
-                  style={tinyLogoImgStyle}
-                />
+                <img src={logo} alt="Mendly logo" style={tinyLogoImgStyle} />
               </span>
               Mendly App
             </div>
@@ -969,7 +1134,6 @@ const JourneyOverviewPage: React.FC = () => {
 
         {/* CONTENT */}
         <div style={bottomSectionStyle}>
-          {/* Hero image full width, directly under nav */}
           <div style={heroImageCard}>
             <img
               src={heroImage}
@@ -979,7 +1143,6 @@ const JourneyOverviewPage: React.FC = () => {
           </div>
 
           <div style={innerContentStyle}>
-            {/* four main buttons */}
             <div
               style={{
                 display: "grid",
@@ -988,22 +1151,6 @@ const JourneyOverviewPage: React.FC = () => {
                 width: "100%",
               }}
             >
-              <button
-                type="button"
-                style={{ ...actionBtn, paddingBlock: 14 }}
-                onClick={() => navigate("/check-in")}
-              >
-                Check in
-              </button>
-
-              <button
-                type="button"
-                style={{ ...actionBtn, paddingBlock: 14 }}
-                onClick={() => navigate("/support")}
-              >
-                Find support
-              </button>
-
               <button
                 type="button"
                 style={{ ...actionBtn, paddingBlock: 14 }}
@@ -1023,13 +1170,28 @@ const JourneyOverviewPage: React.FC = () => {
               <button
                 type="button"
                 style={{ ...actionBtn, paddingBlock: 14 }}
+                onClick={() => navigate("/support")}
+              >
+                Find support
+              </button>
+
+              <button
+                type="button"
+                style={{ ...actionBtn, paddingBlock: 14 }}
                 onClick={() => navigate("/psychologists")}
               >
                 Find a Psychologist
               </button>
             </div>
 
-            {/* Positive Notifications button – full width */}
+            <button
+              type="button"
+              style={{ ...actionBtn, marginTop: 4 }}
+              onClick={() => navigate("/check-in")}
+            >
+              Daily Check in
+            </button>
+
             <button
               type="button"
               style={{ ...actionBtn, marginTop: 4 }}
@@ -1038,7 +1200,6 @@ const JourneyOverviewPage: React.FC = () => {
               Positive Notifications / Motivation Notes
             </button>
 
-            {/* Posts teaser – rotating tips (3 at a time) */}
             <div
               style={{ ...cardStyle }}
               onMouseDown={handleHoldStart}
@@ -1048,13 +1209,7 @@ const JourneyOverviewPage: React.FC = () => {
               onTouchEnd={handleHoldEnd}
             >
               <div style={{ fontWeight: 700, marginBottom: 6 }}>Posts</div>
-              <div
-                style={{
-                  fontWeight: 700,
-                  fontSize: 13,
-                  marginBottom: 4,
-                }}
-              >
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
                 Why Mood Tracking Works
               </div>
               <ul style={bulletListStyle}>
@@ -1082,7 +1237,7 @@ const JourneyOverviewPage: React.FC = () => {
           </div>
         </div>
 
-        {/* BOTTOM NAV  (📷 camera button kept in the middle item) */}
+        {/* BOTTOM NAV */}
         <div style={bottomNavStyle}>
           <div
             style={navItemStyle}
@@ -1120,15 +1275,14 @@ const JourneyOverviewPage: React.FC = () => {
             <div style={modalStyle}>
               <div style={modalTitleStyle}>Short wellbeing check</div>
               <div style={modalBodyStyle}>
-                We noticed that your mood has been a bit low over the last
-                couple of weeks. We’d like to offer you a very short
-                questionnaire (2 quick questions) to better understand how
-                you’ve been feeling.
+                We noticed that your mood has been a bit low over the last couple
+                of weeks. We’d like to offer you a very short questionnaire (2
+                quick questions) to better understand how you’ve been feeling.
               </div>
               <div style={modalNoteStyle}>
-                This is not a diagnosis. It’s a screening tool to help you
-                and, if you choose, your care team. You can stop using the
-                app at any time.
+                This is not a diagnosis. It’s a screening tool to help you and,
+                if you choose, your care team. You can stop using the app at any
+                time.
               </div>
               <button
                 type="button"
@@ -1230,13 +1384,7 @@ const JourneyOverviewPage: React.FC = () => {
           <div style={memoriesOverlayStyle}>
             <div style={memoriesModalStyle}>
               <div style={memoriesHeaderRow}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span role="img" aria-label="sparkles">
                     ✨
                   </span>
@@ -1260,38 +1408,20 @@ const JourneyOverviewPage: React.FC = () => {
                   marginBottom: 4,
                 }}
               >
-                When things feel heavy, it can help to look back at moments
-                that made you smile. Here are some of yours. 💙
+                When things feel heavy, it can help to look back at moments that
+                made you smile. Here are some of yours. 💙
               </div>
 
               {autoMemoriesLoading ? (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#6b7280",
-                    paddingTop: 8,
-                  }}
-                >
+                <div style={{ fontSize: 12, color: "#6b7280", paddingTop: 8 }}>
                   Loading your memories…
                 </div>
               ) : autoMemoriesError ? (
-                <div
-                  style={{
-                    marginTop: 4,
-                    fontSize: 11,
-                    color: "#b91c1c",
-                  }}
-                >
+                <div style={{ marginTop: 4, fontSize: 11, color: "#b91c1c" }}>
                   {autoMemoriesError}
                 </div>
               ) : autoMemories.length === 0 ? (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#6b7280",
-                    paddingTop: 8,
-                  }}
-                >
+                <div style={{ fontSize: 12, color: "#6b7280", paddingTop: 8 }}>
                   You don&apos;t have any saved memories yet. You can add some
                   from the camera button below. 📷
                 </div>
@@ -1300,9 +1430,9 @@ const JourneyOverviewPage: React.FC = () => {
                   {autoMemories.map((m) => {
                     const imgSrc = m.image_url.startsWith("http")
                       ? m.image_url
-                      : `${API_BASE}${
-                          m.image_url.startsWith("/") ? "" : "/"
-                        }${m.image_url}`;
+                      : `${API_BASE}${m.image_url.startsWith("/") ? "" : "/"}${
+                          m.image_url
+                        }`;
                     return (
                       <div key={m.memory_id} style={memoriesCard}>
                         <div
@@ -1322,17 +1452,10 @@ const JourneyOverviewPage: React.FC = () => {
                         </div>
                         <div style={memoriesBody}>
                           {m.caption && (
-                            <div style={{ fontSize: 11 }}>
-                              “{m.caption}”
-                            </div>
+                            <div style={{ fontSize: 11 }}>“{m.caption}”</div>
                           )}
                           {m.memory_date && (
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "#4b5563",
-                              }}
-                            >
+                            <div style={{ fontSize: 10, color: "#4b5563" }}>
                               {m.memory_date}
                             </div>
                           )}
@@ -1379,13 +1502,7 @@ const JourneyOverviewPage: React.FC = () => {
           <div style={memoriesOverlayStyle}>
             <div style={memoriesModalStyle}>
               <div style={memoriesHeaderRow}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span role="img" aria-label="camera">
                     📷
                   </span>
@@ -1402,18 +1519,11 @@ const JourneyOverviewPage: React.FC = () => {
                 </button>
               </div>
 
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#4b5563",
-                  marginBottom: 4,
-                }}
-              >
+              <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 4 }}>
                 Add a few photos that make you smile. They’ll be saved only when
                 you hit <strong>Save all</strong>. 💙
               </div>
 
-              {/* Inline upload → adds to local list only */}
               <form onSubmit={handleAddPendingMemory} style={memoriesUploadRow}>
                 <div style={memoriesInputRow}>
                   <input
@@ -1448,7 +1558,6 @@ const JourneyOverviewPage: React.FC = () => {
                 </div>
               </form>
 
-              {/* Save-all + link to gallery */}
               <div
                 style={{
                   display: "flex",
@@ -1498,18 +1607,11 @@ const JourneyOverviewPage: React.FC = () => {
               </div>
 
               {memoriesError && (
-                <div
-                  style={{
-                    marginTop: 4,
-                    fontSize: 11,
-                    color: "#b91c1c",
-                  }}
-                >
+                <div style={{ marginTop: 4, fontSize: 11, color: "#b91c1c" }}>
                   {memoriesError}
                 </div>
               )}
 
-              {/* List of pending memories (small grid, local only) */}
               <div style={memoriesGrid}>
                 {pendingMemories.length === 0 ? (
                   <div
@@ -1580,6 +1682,60 @@ const JourneyOverviewPage: React.FC = () => {
                   ))
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🎙️ Floating Mic Button → starts/stops Background Monitoring */}
+        <button
+          type="button"
+          style={micBtnStyle}
+          onClick={() => (isListening ? handleStopListening() : handleStartListening())}
+          aria-label="Background voice monitoring"
+          title={isListening ? "Stop listening" : "Start listening"}
+        >
+          {isListening ? "⏹️" : "🎙️"}
+        </button>
+
+        {/* small feedback */}
+        {(voiceText || voiceError || lastAudioEvent) && (
+          <div
+            style={{
+              position: "absolute",
+              left: 12,
+              right: 12,
+              bottom: 128,
+              zIndex: 60,
+              backgroundColor: "rgba(15,23,42,0.85)",
+              color: "#f9fafb",
+              borderRadius: 14,
+              padding: "10px 12px",
+              fontSize: 12,
+              boxShadow: "0 10px 22px rgba(0,0,0,0.25)",
+            }}
+          >
+            {isListening && (
+              <div style={{ marginBottom: 6, opacity: 0.9 }}>
+                <strong>Status:</strong> Listening in background (notification is on)
+              </div>
+            )}
+            {voiceText && (
+              <div>
+                <strong>Audio:</strong> {voiceText}
+              </div>
+            )}
+            {lastAudioEvent && (
+              <div style={{ marginTop: 4, opacity: 0.85 }}>
+                <strong>Last event:</strong>{" "}
+                {lastAudioEvent.type} • {Math.round(lastAudioEvent.confidence * 100)}% •{" "}
+                {lastAudioEvent.ts}
+              </div>
+            )}
+            {voiceError && (
+              <div style={{ marginTop: 6, color: "#fecaca" }}>{voiceError}</div>
+            )}
+            <div style={{ marginTop: 6, opacity: 0.75 }}>
+              Tip: tap the notification to return to Mendly.
             </div>
           </div>
         )}

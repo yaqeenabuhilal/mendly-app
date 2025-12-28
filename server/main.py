@@ -1,17 +1,17 @@
 # server/main.py
-
 import os
 import asyncio
 import logging
 import threading
 from typing import AsyncIterator
-from pathlib import Path  # <-- added
-from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
+
 from fastapi import FastAPI  # type: ignore
-from fastapi.staticfiles import StaticFiles  # <-- added
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles  # type: ignore
 from sqlalchemy import text  # type: ignore
-from server.routers.psychologists_routes import router as psychologists_router
-from server.routers.appointments_routes import router as appointments_router
+from starlette.requests import Request
+from starlette.responses import Response
 
 from .db import engine, SessionLocal
 from .init_db import ensure_database_and_schema
@@ -25,8 +25,11 @@ from .routers import (
     support_routes,
     screenings_routes,
     photo_memory_routes,
+    appointments_routes,
+    psychologists_routes,
+    psychologist_routes,
 )
-from .notification_worker import start_worker  # <-- background sender
+from .notification_worker import start_worker
 
 log = logging.getLogger("mendly.startup")
 logging.basicConfig(level=logging.INFO)
@@ -35,113 +38,128 @@ INIT_DB_ON_STARTUP = os.getenv("INIT_DB_ON_STARTUP", "1") == "1"
 DB_WARMUP_ON_STARTUP = os.getenv("DB_WARMUP_ON_STARTUP", "0") == "1"
 DB_PING_TIMEOUT_SEC = float(os.getenv("DB_PING_TIMEOUT_SEC", "1.5"))
 
-# notification worker settings
-NOTIF_WORKER_ENABLED = os.getenv("NOTIF_WORKER_ENABLED", "1") == "1"
+NOTIF_WORKER_ENABLED = os.getenv("NOTIF_WORKER_ENABLED", "0") == "1"
 NOTIF_WORKER_INTERVAL_SEC = int(os.getenv("NOTIF_WORKER_INTERVAL_SEC", "60"))
 
-origins = [
+# If you want strict origins, set CORS_ALLOW_ALL=0 in server/.env
+CORS_ALLOW_ALL = os.getenv("CORS_ALLOW_ALL", "1") == "1"
+
+STRICT_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost",
     "http://127.0.0.1",
+    "http://10.0.2.2",
+    "http://10.0.2.2:5173",
+    "http://10.0.2.2:8000",
     "capacitor://localhost",
+    "http://localhost:8080",
 ]
 
 
 async def _ping_db_quick() -> None:
-  """Tiny best-effort ping; never block startup."""
-  if DB_PING_TIMEOUT_SEC <= 0:
-      log.info("[startup] quick DB ping disabled.")
-      return
+    if DB_PING_TIMEOUT_SEC <= 0:
+        log.info("[startup] quick DB ping disabled.")
+        return
 
-  def _do_ping():
-      with SessionLocal() as db:
-          db.execute(text("SELECT 1"))
+    def _do_ping():
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
 
-  try:
-      await asyncio.wait_for(
-          asyncio.to_thread(_do_ping),
-          timeout=DB_PING_TIMEOUT_SEC,
-      )
-      log.info("[startup] quick DB ping OK.")
-  except asyncio.TimeoutError:
-      # Timeout is common on cold starts—informational only
-      log.info(
-          "[startup] quick DB ping skipped (took > %.1fs). Continuing boot.",
-          DB_PING_TIMEOUT_SEC,
-      )
-  except Exception as e:
-      log.warning("[startup] quick DB ping failed: %r", e)
-
-
-def _safe_init_db() -> None:
-  try:
-      ensure_database_and_schema()
-      log.info("[startup] ensure_database_and_schema finished.")
-  except Exception as e:
-      log.error("[startup] ensure_database_and_schema failed: %r", e)
+    try:
+        await asyncio.wait_for(asyncio.to_thread(_do_ping), timeout=DB_PING_TIMEOUT_SEC)
+        log.info("[startup] quick DB ping OK.")
+    except asyncio.TimeoutError:
+        log.info("[startup] quick DB ping skipped (timeout %.1fs).", DB_PING_TIMEOUT_SEC)
+    except Exception as e:
+        log.warning("[startup] quick DB ping failed: %r", e)
 
 
 def _safe_db_warmup() -> None:
-  try:
-      with SessionLocal() as db:
-          db.execute(text("SELECT 1"))
-      log.info("[startup] DB warmup OK.")
-  except Exception as e:
-      log.info("[startup] DB warmup skipped/failed: %r", e)
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        log.info("[startup] DB warmup OK.")
+    except Exception as e:
+        log.info("[startup] DB warmup skipped/failed: %r", e)
 
 
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-  """
-  Application lifespan:
-  - kick off DB init / warmup in background threads
-  - start notification worker in its own thread
-  - do a quick best-effort DB ping
-  """
-  # Fire-and-forget tasks (do not block startup)
-  if INIT_DB_ON_STARTUP:
-      asyncio.create_task(asyncio.to_thread(_safe_init_db))
-  if DB_WARMUP_ON_STARTUP:
-      asyncio.create_task(asyncio.to_thread(_safe_db_warmup))
+    # Ensure DB + schema BEFORE serving requests
+    if INIT_DB_ON_STARTUP:
+        await asyncio.to_thread(ensure_database_and_schema)
+        log.info("[startup] ensure_database_and_schema finished.")
 
-  # Optional tiny ping with strict timeout
-  await _ping_db_quick()
+    await _ping_db_quick()
 
-  # Start background notification worker (reads NotificationQueue + sends FCM)
-  if NOTIF_WORKER_ENABLED:
-      def _run_worker():
-          start_worker(interval_seconds=NOTIF_WORKER_INTERVAL_SEC)
+    if DB_WARMUP_ON_STARTUP:
+        await asyncio.to_thread(_safe_db_warmup)
 
-      t = threading.Thread(target=_run_worker, daemon=True)
-      t.start()
-      log.info(
-          "[startup] notification worker thread started (interval=%ss)",
-          NOTIF_WORKER_INTERVAL_SEC,
-      )
+    # Start worker only after DB is ready
+    if NOTIF_WORKER_ENABLED:
+        def _run_worker():
+            start_worker(interval_seconds=NOTIF_WORKER_INTERVAL_SEC)
 
-  # ---- app is now running ----
-  yield
-  # No special shutdown logic needed
+        t = threading.Thread(target=_run_worker, daemon=True)
+        t.start()
+        log.info(
+            "[startup] notification worker thread started (interval=%ss)",
+            NOTIF_WORKER_INTERVAL_SEC,
+        )
+
+    yield
 
 
 app = FastAPI(lifespan=lifespan)
 
-# ---- CORS ----
-app.add_middleware(
-  CORSMiddleware,
-  allow_origins=origins,
-  allow_credentials=True,
-  allow_methods=["*"],
-  allow_headers=["*"],
-)
+# Debug: print real Origin for failing requests
+@app.middleware("http")
+async def log_origin(request: Request, call_next):
+    if request.method == "OPTIONS":
+        # Keep this ASCII-only (Windows consoles sometimes crash on emojis)
+        print("OPTIONS Origin:", request.headers.get("origin"))
+        print("Req-Method:", request.headers.get("access-control-request-method"))
+        print("Req-Headers:", request.headers.get("access-control-request-headers"))
+    return await call_next(request)
 
-# ---- MEDIA / STATIC FILES ----
-# Project root = parent of "server" package
+# Optional: avoid 405 on OPTIONS if something slips past CORS
+@app.options("/{path:path}")
+async def options_any(path: str):
+    return Response(status_code=204)
+
+
+@app.post("/debug/log")
+async def debug_log(req: Request):
+    data = await req.json()
+    print("📌 DEBUG LOG:", data)  # <-- shows in your server terminal
+    return {"ok": True}
+
+# ---- CORS ----
+if CORS_ALLOW_ALL:
+    # DEV MODE: allow ANY origin (fixes random Android/WebView/Capacitor origins)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=False,   # IMPORTANT with regex/* (and you use Bearer tokens anyway)
+        allow_methods=["*"],
+        allow_headers=["*"],
+        max_age=86400,
+    )
+else:
+    # STRICT MODE: only these origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=STRICT_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        max_age=86400,
+    )
+
+# ---- MEDIA / STATIC ----
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MEDIA_ROOT = PROJECT_ROOT / "media"
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
-
-# This is what allows GET /media/.... to work
 app.mount("/media", StaticFiles(directory=str(MEDIA_ROOT)), name="media")
 
 # ---- Routers ----
@@ -154,16 +172,11 @@ app.include_router(device_routes.router)
 app.include_router(support_routes.router)
 app.include_router(screenings_routes.router)
 app.include_router(photo_memory_routes.router)
-app.include_router(psychologists_router)
-app.include_router(appointments_router)
-
+app.include_router(appointments_routes.router)
+app.include_router(psychologists_routes.router)
+app.include_router(psychologist_routes.router)
 
 @app.get("/health/db")
 def health_db():
-  with engine.connect() as conn:
-      return {
-          "ok": True,
-          "time": str(
-              conn.execute(text("SELECT SYSDATETIMEOFFSET()")).scalar_one()
-          ),
-      }
+    with engine.connect() as conn:
+        return {"ok": True, "db": conn.execute(text("SELECT DB_NAME()")).scalar_one()}

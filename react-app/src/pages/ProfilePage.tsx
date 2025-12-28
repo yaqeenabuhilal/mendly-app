@@ -560,7 +560,7 @@ const ProfilePage: React.FC = () => {
                 style={changePwdButtonStyle}
                 onClick={handleOpenPwdForm}
               >
-                Change password
+                🔒 Change password
               </button>
             </>
           )}

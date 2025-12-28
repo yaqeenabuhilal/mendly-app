@@ -18,9 +18,6 @@ const SignupPage: React.FC = () => {
   const [specialty, setSpecialty] = useState("");
   const [workplace, setWorkplace] = useState("");
   const [city, setCity] = useState("");
-  const [bio, setBio] = useState("");
-  const [yearsExperience, setYearsExperience] = useState<number | "">("");
-  const [licenseNumber, setLicenseNumber] = useState("");
 
   const navigate = useNavigate();
 

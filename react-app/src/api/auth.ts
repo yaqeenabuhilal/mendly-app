@@ -21,7 +21,7 @@ export const signup = (data: {
 }) => axios.post(`${API_BASE}/auth/signup`, data);
 
 export function signupPsychologist(data: any) {
-  return axios.post("http://localhost:8000/auth/signup-psychologist", data);
+  return axios.post(`${API_BASE}/auth/signup-psychologist`, data);
 }
 
 
@@ -187,7 +187,7 @@ export async function sendChatToAI(messages: AiMessage[]): Promise<string> {
     throw new Error("Not authenticated");
   }
 
-  const res = await fetch("http://localhost:8000/ai/chat", {
+  const res = await fetch(`${API_BASE}/ai/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -213,7 +213,7 @@ export async function submitMoodCheckin(payload: {
   note: string | null;
 }): Promise<void> {
   const token = localStorage.getItem("access_token");
-  const res = await fetch("http://localhost:8000/checkin", {
+  const res = await fetch(`${API_BASE}/checkin`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -371,5 +371,51 @@ export async function getWeeklyPhotoCandidate(): Promise<WeeklyPhotoCandidate> {
   if (!res.ok) {
     throw new Error("Failed to load weekly photo candidate");
   }
+  return res.json();
+}
+
+
+
+export interface PsyClient {
+  user_id: string;
+  username: string;
+  email: string;
+  age: number | null;
+  gender: number | null;
+  appointments_count: number;
+  last_appointment_at: string | null;
+}
+
+export interface PsyAppointment {
+  appointment_id: string;
+  client_user_id: string;
+  client_username: string;
+  client_email: string;
+  client_age: number | null;
+  client_gender: number | null;
+  intake_id: string | null;
+  intake_answers_json: string | null;
+  start_at: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export async function listPsyClients(): Promise<PsyClient[]> {
+  const res = await fetch(`${API_BASE}/psy/clients`, {
+    method: "GET",
+    headers: buildAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function listPsyAppointments(): Promise<PsyAppointment[]> {
+  const res = await fetch(`${API_BASE}/psy/appointments`, {
+    method: "GET",
+    headers: buildAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
